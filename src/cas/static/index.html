@@ -175,7 +175,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .ws-tab-badge.document { border-color: #2a4a7f; color: #4a9eff; }
 .ws-tab-badge.code     { border-color: #2a5a2a; color: #4aaf4a; }
 .ws-tab-badge.list     { border-color: #5a4a2a; color: #af8a4a; }
-.ws-tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ws-tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.ws-tab-rename {
+  flex: 1; min-width: 0; background: var(--bg); color: var(--text);
+  border: 1px solid var(--accent); border-radius: 2px;
+  font-family: var(--mono); font-size: 11px; padding: 1px 4px;
+  outline: none;
+}
 .ws-tab-close {
   font-size: 14px; line-height: 1; color: var(--text-dim);
   background: none; border: none; cursor: pointer; padding: 0 2px; opacity: 0;
@@ -509,6 +515,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       const title = document.createElement("span");
       title.className = "ws-tab-title"; title.textContent = ws.title; title.title = ws.title;
 
+      // Double-click to rename
+      title.addEventListener("dblclick", e => {
+        e.stopPropagation();
+        startRename(id, title, tab);
+      });
+
       const x = document.createElement("button");
       x.className = "ws-tab-close"; x.textContent = "×";
       x.addEventListener("click", e => { e.stopPropagation(); closeWorkspaceById(id); });
@@ -516,6 +528,53 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       tab.appendChild(badge); tab.appendChild(title); tab.appendChild(x);
       tab.addEventListener("click", () => switchTo(id));
       $wsTabs.appendChild(tab);
+    });
+  }
+
+  function startRename(id, titleSpan, tab) {
+    if (streaming) return;
+    const current = workspaces[id].title;
+
+    // Swap span for input
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "ws-tab-rename";
+    input.value = current;
+    tab.replaceChild(input, titleSpan);
+    input.focus();
+    input.select();
+
+    let committed = false;
+
+    async function commit() {
+      if (committed) return;
+      committed = true;
+      const newTitle = input.value.trim() || current;
+      tab.replaceChild(titleSpan, input);
+      if (newTitle === current) return;
+      try {
+        const ws = await api("PUT", "/workspace/" + id, { title: newTitle });
+        workspaces[id] = ws;
+        rebuildTabs();
+        if (id === activeId) {
+          $wsType.textContent = ws.type || "document";
+        }
+      } catch(e) {
+        setStatus("rename failed");
+      }
+    }
+
+    function cancel() {
+      if (committed) return;
+      committed = true;
+      tab.replaceChild(titleSpan, input);
+    }
+
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter")  { e.preventDefault(); input.blur(); }
+      if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      e.stopPropagation(); // prevent tab switch
     });
   }
 
