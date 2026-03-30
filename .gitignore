@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# CAS runtime data — never commit
+~/.cas/
+cas.db
+profile.json
+*.db
+*.db-shm
+*.db-wal
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets / keys
+*.key
+*.pem
+*.env
+.env*
+
+# CAS-CLAUDE.md is internal context for Claude Code sessions
+CAS-CLAUDE.md

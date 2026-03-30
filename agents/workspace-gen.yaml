@@ -1,0 +1,44 @@
+# CAS Agent: workspace-gen
+# Generates workspace content from user intent via local LLM.
+# This agent is internal to CAS — it is NOT exposed in Heddle's MCP mesh.
+#
+# CAS calls generate_workspace_content() and generate_chat_reply() directly
+# via cas.llm. This YAML defines the contract envelope that governs what
+# those calls are permitted to do.
+
+agent:
+  name: cas-workspace
+  version: "1.0.0"
+  description: >
+    Workspace generation agent for CAS. Receives user intent and produces
+    structured markdown document content using a local LLM (qwen3.5:9b via
+    Ollama). Operates under deterministic contract enforcement — all output
+    is bounded by postconditions before the workspace is created or updated.
+
+  model:
+    provider: ollama
+    name: qwen3.5:9b
+    endpoint: "http://localhost:11434/api/chat"
+    stream: false
+
+  # No external MCP servers consumed — LLM access only
+  consumes: []
+
+  # Not exposed in the Heddle mesh — CAS calls this internally
+  exposes: []
+
+  # Contract envelope — enforced by cas.contracts, not LLM guardrails
+  contract:
+    allowed_workspace_types:
+      - document
+    max_workspace_size_kb: 512
+    network_access: false
+    on_violation: fail_closed
+
+  runtime:
+    sandbox: none
+    trust_tier: 2
+    max_execution_time: 90s
+
+  triggers:
+    - type: on_demand
