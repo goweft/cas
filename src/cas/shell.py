@@ -12,7 +12,9 @@ from typing import Any
 from cas.audit import get_cas_auditor
 from cas.conductor import Conductor
 from cas.contracts import AgentContract, load_contract_from_config
+from cas.execution import LocalExecutionContext
 from cas.llm import generate_chat_reply, generate_workspace_content, generate_workspace_edit
+from cas.protocols import ExecutionContext, SessionScope
 from cas.store import CASStore
 from cas.workspaces import Workspace, WorkspaceManager
 
@@ -139,6 +141,7 @@ class Session:
     id: str
     created_at: datetime
     history: list[Message] = field(default_factory=list)
+    execution_context: ExecutionContext | None = field(default=None, repr=False)
 
     def add_message(self, role: str, text: str) -> Message:
         msg = Message(role=role, text=text, timestamp=datetime.now(timezone.utc))
@@ -163,11 +166,13 @@ class Shell:
         contract_config: dict[str, Any] | None = None,
         conductor: Conductor | None = None,
         store: CASStore | None = None,
+        execution_context: ExecutionContext | None = None,
     ) -> None:
         self._contract_config = contract_config or _DEFAULT_CONTRACT_CONFIG
         self._conductor = conductor if conductor is not None else Conductor()
         self._auditor = get_cas_auditor()
         self._store = store if store is not None else CASStore()
+        self._default_ctx = execution_context or LocalExecutionContext()
         self.workspaces = WorkspaceManager(store=self._store)
         self._sessions: dict[str, Session] = {}
         self._restore()
@@ -192,8 +197,13 @@ class Shell:
         if n_ws or n_sess:
             logger.info("Restored %d sessions, %d workspaces from store", n_sess, n_ws)
 
-    def create_session(self) -> Session:
-        session = Session(id=uuid.uuid4().hex[:12], created_at=datetime.now(timezone.utc))
+    def create_session(self, execution_context: ExecutionContext | None = None) -> Session:
+        ctx = execution_context or self._default_ctx
+        session = Session(
+            id=uuid.uuid4().hex[:12],
+            created_at=datetime.now(timezone.utc),
+            execution_context=ctx,
+        )
         self._sessions[session.id] = session
         self._store.save_session(session)
         self._conductor.observe_session_start()

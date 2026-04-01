@@ -71,3 +71,12 @@ def mock_store():
     store.load_messages.return_value = []
     with patch("cas.shell.CASStore", return_value=store):
         yield store
+
+
+@pytest.fixture(autouse=True)
+def mock_execution_context():
+    """Replace LocalExecutionContext so tests don't create ~/.cas/workspaces/."""
+    mock_ctx = MagicMock()
+    mock_ctx.scope = MagicMock()
+    with patch("cas.shell.LocalExecutionContext", return_value=mock_ctx):
+        yield mock_ctx
