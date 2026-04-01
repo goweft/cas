@@ -9,6 +9,8 @@ heddle_src = Path(__file__).parent.parent.parent / "loom" / "src"
 if heddle_src.exists() and str(heddle_src) not in sys.path:
     sys.path.insert(0, str(heddle_src))
 
+from cas.memory_store import InMemoryStore
+
 
 def _stub_workspace_content(title, user_message, ws_type="document", user_context=""):
     return f"# {title}\n\n{user_message}\n"
@@ -63,12 +65,15 @@ def mock_auditor():
 
 
 @pytest.fixture(autouse=True)
-def mock_store():
-    """Replace CASStore with an in-memory mock so tests don't touch ~/.cas/cas.db."""
-    store = MagicMock()
-    store.load_sessions.return_value = {}
-    store.load_workspaces.return_value = {}
-    store.load_messages.return_value = []
+def in_memory_store():
+    """Replace CASStore with InMemoryStore so tests exercise real store
+    logic without touching ~/.cas/cas.db.
+
+    Unlike the previous MagicMock approach, this means session save/load,
+    message persistence, and workspace history all work for real inside
+    tests — the only thing bypassed is SQLite.
+    """
+    store = InMemoryStore()
     with patch("cas.shell.CASStore", return_value=store):
         yield store
 
