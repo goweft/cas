@@ -2,7 +2,7 @@
 
 Proves that:
 1. CASStore conforms to the SessionStore protocol
-2. An alternative InMemoryStore also conforms
+2. InMemoryStore also conforms
 3. Both are interchangeable for Shell construction
 """
 
@@ -10,111 +10,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from cas.memory_store import InMemoryStore
 from cas.protocols import SessionStore
-
-
-# ── InMemoryStore — alternative implementation ───────────────────────
-
-
-class InMemoryStore:
-    """Minimal SessionStore implementation for testing.
-
-    Proves the Protocol is actually swappable — any backend that
-    implements these methods can replace CASStore.
-    """
-
-    def __init__(self):
-        self._sessions: dict[str, dict] = {}
-        self._messages: dict[str, list[dict]] = {}
-        self._workspaces: dict[str, dict] = {}
-        self._history: dict[str, list[dict]] = {}
-        self._version_counters: dict[str, int] = {}
-
-    def save_session(self, session) -> None:
-        self._sessions[session.id] = {
-            "id": session.id,
-            "created_at": session.created_at.isoformat(),
-        }
-
-    def load_sessions(self) -> dict:
-        return dict(self._sessions)
-
-    def save_message(self, session_id: str, message) -> None:
-        self._messages.setdefault(session_id, []).append({
-            "role": message.role,
-            "text": message.text,
-            "timestamp": message.timestamp.isoformat(),
-        })
-
-    def load_messages(self, session_id: str) -> list[dict]:
-        return list(self._messages.get(session_id, []))
-
-    def save_workspace(self, workspace, session_id: str) -> None:
-        self._workspaces[workspace.id] = {
-            "id": workspace.id,
-            "session_id": session_id,
-            "type": workspace.type,
-            "title": workspace.title,
-            "content": workspace.content,
-            "created_at": workspace.created_at,
-            "closed_at": workspace.closed_at,
-        }
-
-    def update_workspace(self, workspace) -> None:
-        if workspace.id in self._workspaces:
-            # Snapshot current before updating
-            current = self._workspaces[workspace.id]
-            counter = self._version_counters.get(workspace.id, 0) + 1
-            self._version_counters[workspace.id] = counter
-            self._history.setdefault(workspace.id, []).append({
-                "version": counter,
-                "title": current["title"],
-                "content": current["content"],
-                "saved_at": datetime.now(timezone.utc).isoformat(),
-            })
-            self._workspaces[workspace.id]["title"] = workspace.title
-            self._workspaces[workspace.id]["content"] = workspace.content
-            self._workspaces[workspace.id]["closed_at"] = workspace.closed_at
-
-    def close_workspace(self, workspace_id: str, closed_at: datetime) -> None:
-        if workspace_id in self._workspaces:
-            self._workspaces[workspace_id]["closed_at"] = closed_at
-
-    def load_workspaces(self, contract_factory) -> dict:
-        result = {}
-        for ws_id, ws in self._workspaces.items():
-            if ws["closed_at"] is None:
-                result[ws_id] = {**ws, "contract": contract_factory()}
-        return result
-
-    def load_history(self, workspace_id: str) -> list[dict]:
-        return list(reversed(self._history.get(workspace_id, [])))
-
-    def get_version(self, workspace_id: str, version: int) -> dict | None:
-        for entry in self._history.get(workspace_id, []):
-            if entry["version"] == version:
-                return entry
-        return None
-
-    def apply_version(self, workspace_id: str, version: int) -> bool:
-        target = self.get_version(workspace_id, version)
-        if not target or workspace_id not in self._workspaces:
-            return False
-        self._workspaces[workspace_id]["title"] = target["title"]
-        self._workspaces[workspace_id]["content"] = target["content"]
-        return True
-
-    def undo(self, workspace_id: str) -> dict | None:
-        history = self.load_history(workspace_id)
-        if not history:
-            return None
-        latest = history[0]
-        self.apply_version(workspace_id, latest["version"])
-        ws = self._workspaces.get(workspace_id)
-        return {"title": ws["title"], "content": ws["content"]} if ws else None
-
-    def close(self) -> None:
-        pass
 
 
 # ── Protocol conformance ─────────────────────────────────────────
@@ -164,3 +61,80 @@ class TestInMemoryStoreBasics:
     def test_close_is_noop(self):
         store = InMemoryStore()
         store.close()  # should not raise
+
+
+class TestInMemoryStoreWorkspaces:
+    def test_workspace_roundtrip(self):
+        from cas.contracts import load_contract_from_config
+        from cas.workspaces import Workspace
+        store = InMemoryStore()
+        ws = Workspace(
+            id="ws1", type="document", title="Test",
+            content="hello", created_at=datetime.now(timezone.utc),
+            contract=load_contract_from_config("test", {"allowed_workspace_types": ["document"]}),
+        )
+        store.save_workspace(ws, session_id="s1")
+        factory = lambda: load_contract_from_config("test", {"allowed_workspace_types": ["document"]})
+        loaded = store.load_workspaces(factory)
+        assert "ws1" in loaded
+        assert loaded["ws1"]["title"] == "Test"
+        assert loaded["ws1"]["content"] == "hello"
+
+    def test_closed_workspace_not_in_load(self):
+        from cas.contracts import load_contract_from_config
+        from cas.workspaces import Workspace
+        store = InMemoryStore()
+        ws = Workspace(
+            id="ws2", type="document", title="Closed",
+            content="bye", created_at=datetime.now(timezone.utc),
+            contract=load_contract_from_config("test", {"allowed_workspace_types": ["document"]}),
+        )
+        store.save_workspace(ws, session_id="s1")
+        store.close_workspace("ws2", datetime.now(timezone.utc))
+        factory = lambda: load_contract_from_config("test", {"allowed_workspace_types": ["document"]})
+        loaded = store.load_workspaces(factory)
+        assert "ws2" not in loaded
+
+    def test_update_creates_history(self):
+        from cas.contracts import load_contract_from_config
+        from cas.workspaces import Workspace
+        store = InMemoryStore()
+        ws = Workspace(
+            id="ws3", type="document", title="V1",
+            content="original", created_at=datetime.now(timezone.utc),
+            contract=load_contract_from_config("test", {"allowed_workspace_types": ["document"]}),
+        )
+        store.save_workspace(ws, session_id="s1")
+        ws.title = "V2"
+        ws.content = "updated"  # type: ignore[misc]
+        store.update_workspace(ws)
+        history = store.load_history("ws3")
+        assert len(history) == 1
+        assert history[0]["title"] == "V1"
+        assert history[0]["content"] == "original"
+
+    def test_undo(self):
+        from cas.contracts import load_contract_from_config
+        from cas.workspaces import Workspace
+        store = InMemoryStore()
+        ws = Workspace(
+            id="ws4", type="document", title="Before",
+            content="old", created_at=datetime.now(timezone.utc),
+            contract=load_contract_from_config("test", {"allowed_workspace_types": ["document"]}),
+        )
+        store.save_workspace(ws, session_id="s1")
+        ws.title = "After"
+        ws.content = "new"  # type: ignore[misc]
+        store.update_workspace(ws)
+        result = store.undo("ws4")
+        assert result is not None
+        assert result["title"] == "Before"
+        assert result["content"] == "old"
+
+    def test_undo_no_history_returns_none(self):
+        store = InMemoryStore()
+        assert store.undo("nonexistent") is None
+
+    def test_repr(self):
+        store = InMemoryStore()
+        assert "InMemoryStore" in repr(store)
