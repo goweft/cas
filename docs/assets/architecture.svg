@@ -1,48 +1,58 @@
-<svg width="660" height="500" viewBox="0 0 660 500" xmlns="http://www.w3.org/2000/svg">
-<rect width="660" height="500" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-<text x="330" y="32" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600" font-family="sans-serif">CAS — Message Lifecycle</text>
-<line x1="40" y1="44" x2="620" y2="44" stroke="#30363d" stroke-width="1"/>
-<rect x="40" y="60" width="170" height="56" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
-<text x="125" y="84" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Conversation</text>
-<text x="125" y="100" text-anchor="middle" fill="#6e7681" font-size="10" font-weight="normal" font-family="sans-serif">chat panel</text>
-<defs><marker id="arr21288" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#79c0ff"/></marker></defs><line x1="212" y1="88" x2="248" y2="88" stroke="#79c0ff" stroke-width="1.5" marker-end="url(#arr21288)"/>
-<text x="230" y="80" text-anchor="middle" fill="#79c0ff" font-size="9" font-family="sans-serif">message</text>
-<rect x="250" y="60" width="160" height="56" rx="6" fill="#161b22" stroke="#79c0ff" stroke-width="1"/>
-<text x="330" y="80" text-anchor="middle" fill="#79c0ff" font-size="12" font-weight="600" font-family="sans-serif">CAS Shell</text>
-<text x="330" y="96" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">session · history · conductor</text>
-<defs><marker id="arr41288" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7ee787"/></marker></defs><line x1="412" y1="88" x2="448" y2="88" stroke="#7ee787" stroke-width="1.5" marker-end="url(#arr41288)"/>
-<text x="430" y="80" text-anchor="middle" fill="#7ee787" font-size="9" font-family="sans-serif">workspace</text>
-<rect x="450" y="60" width="170" height="56" rx="6" fill="#161b22" stroke="#7ee787" stroke-width="1"/>
-<text x="535" y="84" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="600" font-family="sans-serif">Workspace Panel</text>
-<text x="535" y="100" text-anchor="middle" fill="#6e7681" font-size="10" font-weight="normal" font-family="sans-serif">direct manipulation</text>
-<defs><marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7ee787"/></marker></defs>
-<line x1="535" y1="116" x2="535" y2="145" stroke="#7ee787" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
-<text x="570" y="133" text-anchor="middle" fill="#7ee787" font-size="9" font-family="sans-serif">edit directly</text>
-<line x1="40" y1="150" x2="620" y2="150" stroke="#30363d" stroke-width="0.5" stroke-dasharray="6 4"/>
-<text x="330" y="163" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">— per-message pipeline —</text>
-<rect x="200" y="170" width="260" height="52" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
-<text x="330" y="191" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Intent Detection</text>
-<text x="330" y="207" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">regex · no LLM · fires before generation</text>
-<defs><marker id="arr330224" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6e7681"/></marker></defs><line x1="330" y1="224" x2="330" y2="250" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arr330224)"/>
-<text x="370" y="240" text-anchor="middle" fill="#6e7681" font-size="9" font-family="sans-serif">intent.kind</text>
-<rect x="200" y="252" width="260" height="66" rx="6" fill="#161b22" stroke="#ffa657" stroke-width="1"/>
-<text x="330" y="273" text-anchor="middle" fill="#ffa657" font-size="12" font-weight="600" font-family="sans-serif">Contract Layer</text>
-<text x="330" y="289" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">preconditions  ·  invariants</text>
-<text x="330" y="304" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">postconditions  ·  fail-closed</text>
-<defs><marker id="arr330320" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6e7681"/></marker></defs><line x1="330" y1="320" x2="330" y2="346" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arr330320)"/>
-<text x="380" y="336" text-anchor="middle" fill="#6e7681" font-size="9" font-family="sans-serif">verified action</text>
-<rect x="150" y="348" width="150" height="52" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
-<text x="225" y="369" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Ollama</text>
-<text x="225" y="385" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">qwen3.5 · qwen2.5-coder</text>
-<text x="330" y="378" text-anchor="middle" fill="#6e7681" font-size="11" font-weight="normal" font-family="sans-serif">or</text>
-<rect x="360" y="348" width="150" height="52" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
-<text x="435" y="369" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Anthropic API</text>
-<text x="435" y="385" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">claude-sonnet · claude-haiku</text>
-<text x="330" y="412" text-anchor="middle" fill="#6e7681" font-size="9" font-family="sans-serif">CAS_PROVIDER=ollama|anthropic</text>
-<defs><marker id="arr225400" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6e7681"/></marker></defs><line x1="225" y1="400" x2="270" y2="436" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arr225400)"/>
-<defs><marker id="arr435400" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6e7681"/></marker></defs><line x1="435" y1="400" x2="390" y2="436" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arr435400)"/>
-<rect x="250" y="438" width="160" height="44" rx="6" fill="#161b22" stroke="#7ee787" stroke-width="1"/>
-<text x="330" y="457" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="600" font-family="sans-serif">Workspace Created</text>
-<text x="330" y="471" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">SSE token stream · SQLite persist</text>
-<text x="652" y="492" text-anchor="end" fill="#30363d" font-size="9" font-weight="normal" font-family="sans-serif">CAS → Contracts → Heddle</text>
+<svg width="660" height="480" viewBox="0 0 660 480" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#6e7681"/>
+  </marker>
+  <marker id="arrowG" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#7ee787"/>
+  </marker>
+  <marker id="arrowB" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#79c0ff"/>
+  </marker>
+</defs>
+<rect width="660" height="480" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+<text x="330" y="30" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="600" font-family="sans-serif">CAS — Message Lifecycle</text>
+<line x1="40" y1="42" x2="620" y2="42" stroke="#30363d" stroke-width="1"/>
+<rect x="35" y="55" width="165" height="54" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="118" y="78" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Conversation</text>
+<text x="118" y="95" text-anchor="middle" fill="#6e7681" font-size="10" font-weight="normal" font-family="sans-serif">chat panel</text>
+<line x1="202" y1="82" x2="242" y2="82" stroke="#79c0ff" stroke-width="1.5" marker-end="url(#arrowB)"/>
+<text x="222" y="74" text-anchor="middle" fill="#79c0ff" font-size="9" font-weight="normal" font-family="sans-serif">message</text>
+<rect x="244" y="55" width="172" height="54" rx="6" fill="#161b22" stroke="#79c0ff" stroke-width="1"/>
+<text x="330" y="78" text-anchor="middle" fill="#79c0ff" font-size="12" font-weight="600" font-family="sans-serif">CAS Shell</text>
+<text x="330" y="95" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">session · history · conductor</text>
+<line x1="418" y1="82" x2="458" y2="82" stroke="#7ee787" stroke-width="1.5" marker-end="url(#arrowG)"/>
+<text x="438" y="74" text-anchor="middle" fill="#7ee787" font-size="9" font-weight="normal" font-family="sans-serif">workspace</text>
+<rect x="460" y="55" width="165" height="54" rx="6" fill="#161b22" stroke="#7ee787" stroke-width="1"/>
+<text x="543" y="78" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="600" font-family="sans-serif">Workspace Panel</text>
+<text x="543" y="95" text-anchor="middle" fill="#6e7681" font-size="10" font-weight="normal" font-family="sans-serif">direct manipulation</text>
+<line x1="543" y1="109" x2="543" y2="138" stroke="#7ee787" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrowG)"/>
+<text x="600" y="127" text-anchor="middle" fill="#7ee787" font-size="9" font-weight="normal" font-family="sans-serif">edit directly</text>
+<line x1="40" y1="143" x2="620" y2="143" stroke="#30363d" stroke-width="0.5" stroke-dasharray="5 4"/>
+<text x="330" y="156" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">— per-message pipeline —</text>
+<rect x="200" y="163" width="260" height="50" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="330" y="184" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Intent Detection</text>
+<text x="330" y="200" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">regex · no LLM · fires before generation</text>
+<line x1="330" y1="215" x2="330" y2="238" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="378" y="230" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">intent.kind</text>
+<rect x="200" y="240" width="260" height="64" rx="6" fill="#161b22" stroke="#ffa657" stroke-width="1"/>
+<text x="330" y="261" text-anchor="middle" fill="#ffa657" font-size="12" font-weight="600" font-family="sans-serif">Contract Layer</text>
+<text x="330" y="277" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">preconditions  ·  invariants</text>
+<text x="330" y="293" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">postconditions  ·  fail-closed</text>
+<line x1="330" y1="306" x2="330" y2="330" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="384" y="322" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">verified action</text>
+<rect x="148" y="332" width="152" height="50" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="224" y="353" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Ollama</text>
+<text x="224" y="369" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">qwen3.5 · coder:7b</text>
+<text x="330" y="362" text-anchor="middle" fill="#6e7681" font-size="11" font-weight="normal" font-family="sans-serif">or</text>
+<rect x="360" y="332" width="152" height="50" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="436" y="353" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600" font-family="sans-serif">Anthropic API</text>
+<text x="436" y="369" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">sonnet · haiku</text>
+<text x="330" y="400" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">CAS_PROVIDER=ollama | anthropic</text>
+<line x1="224" y1="382" x2="278" y2="418" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="436" y1="382" x2="382" y2="418" stroke="#6e7681" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="250" y="420" width="160" height="44" rx="6" fill="#161b22" stroke="#7ee787" stroke-width="1"/>
+<text x="330" y="439" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="600" font-family="sans-serif">Workspace Created</text>
+<text x="330" y="453" text-anchor="middle" fill="#6e7681" font-size="9" font-weight="normal" font-family="sans-serif">SSE tokens · SQLite persist</text>
+<text x="650" y="472" text-anchor="end" fill="#30363d" font-size="9" font-weight="normal" font-family="sans-serif">CAS → Contracts → Heddle</text>
 </svg>
