@@ -1,13 +1,26 @@
-"""CAS LLM bridge — synchronous and streaming Ollama integration.
+"""CAS LLM bridge — multi-provider, synchronous and streaming.
 
-Model routing:
-    document → qwen3.5:9b   (general, strong at structured prose)
-    list     → qwen3.5:9b   (general)
-    code     → qwen2.5-coder:7b  (coding-specialised, faster)
-    chat     → qwen3.5:9b   (general)
+Providers
+---------
+Set CAS_PROVIDER environment variable to select a backend:
 
-Override any model via MODEL_OVERRIDES in this file, or set the
-CAS_MODEL_* environment variables at service startup.
+    CAS_PROVIDER=ollama      (default) — local Ollama inference
+    CAS_PROVIDER=anthropic   — Anthropic API (requires ANTHROPIC_API_KEY)
+
+Model routing
+-------------
+Each workspace type maps to a model appropriate for that provider:
+
+    Ollama:
+        document / list / chat  → qwen3.5:9b
+        code                    → qwen2.5-coder:7b
+
+    Anthropic:
+        document / list / chat  → claude-sonnet-4-6
+        code                    → claude-haiku-4-5-20251001
+
+Override any model via CAS_MODEL_* environment variables:
+    CAS_MODEL_DOCUMENT, CAS_MODEL_LIST, CAS_MODEL_CODE, CAS_MODEL_CHAT
 
 Public non-streaming functions:
     generate_workspace_content(title, user_message, ws_type, user_context) -> str
@@ -33,38 +46,54 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_OLLAMA_BASE    = "http://localhost:11434"
-_TIMEOUT        = 60.0
-_STREAM_TIMEOUT = 120.0
+# ── Provider selection ───────────────────────────────────────────────
+
+CAS_PROVIDER = os.environ.get("CAS_PROVIDER", "ollama").lower()
 
 # ── Model routing ────────────────────────────────────────────────────
 
-_DEFAULT_MODELS = {
-    "document": "qwen3.5:9b",
-    "list":     "qwen3.5:9b",
-    "code":     "qwen2.5-coder:7b",
-    "chat":     "qwen3.5:9b",
+_DEFAULT_MODELS: dict[str, dict[str, str]] = {
+    "ollama": {
+        "document": "qwen3.5:9b",
+        "list":     "qwen3.5:9b",
+        "code":     "qwen2.5-coder:7b",
+        "chat":     "qwen3.5:9b",
+    },
+    "anthropic": {
+        "document": "claude-sonnet-4-6",
+        "list":     "claude-sonnet-4-6",
+        "code":     "claude-haiku-4-5-20251001",
+        "chat":     "claude-sonnet-4-6",
+    },
 }
 
-MODEL_OVERRIDES = {
+_MODEL_OVERRIDES = {
     k: os.environ[f"CAS_MODEL_{k.upper()}"]
-    for k in _DEFAULT_MODELS
+    for k in ("document", "list", "code", "chat")
     if f"CAS_MODEL_{k.upper()}" in os.environ
 }
 
+
 def model_for(ws_type: str) -> str:
-    if ws_type in MODEL_OVERRIDES:
-        return MODEL_OVERRIDES[ws_type]
-    return _DEFAULT_MODELS.get(ws_type, _DEFAULT_MODELS["document"])
+    if ws_type in _MODEL_OVERRIDES:
+        return _MODEL_OVERRIDES[ws_type]
+    provider_models = _DEFAULT_MODELS.get(CAS_PROVIDER, _DEFAULT_MODELS["ollama"])
+    return provider_models.get(ws_type, provider_models["document"])
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
+# ── Ollama internals ─────────────────────────────────────────────────
+
+_OLLAMA_BASE    = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+_TIMEOUT        = 60.0
+_STREAM_TIMEOUT = 120.0
+
 
 def _strip_think(text: str) -> str:
+    """Remove <think>...</think> blocks emitted by qwen models."""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
-def _chat(messages: list[dict[str, str]], model: str, temperature: float = 0.7) -> str:
+def _chat_ollama(messages: list[dict], model: str, temperature: float) -> str:
     payload: dict[str, Any] = {
         "model": model, "messages": messages,
         "stream": False, "options": {"temperature": temperature},
@@ -84,14 +113,9 @@ def _chat(messages: list[dict[str, str]], model: str, temperature: float = 0.7) 
         return ""
 
 
-def stream_chat(
-    messages: list[dict[str, str]],
-    model: str = "",
-    temperature: float = 0.7,
+def _stream_ollama(
+    messages: list[dict], model: str, temperature: float
 ) -> Iterator[str]:
-    """Stream tokens from Ollama, suppressing think-phase tokens."""
-    if not model:
-        model = _DEFAULT_MODELS["document"]
     payload: dict[str, Any] = {
         "model": model, "messages": messages,
         "stream": True, "options": {"temperature": temperature},
@@ -100,6 +124,7 @@ def stream_chat(
         with httpx.stream("POST", f"{_OLLAMA_BASE}/api/chat",
                           json=payload, timeout=_STREAM_TIMEOUT) as resp:
             resp.raise_for_status()
+            in_think = False
             for line in resp.iter_lines():
                 if not line:
                     continue
@@ -109,7 +134,13 @@ def stream_chat(
                     continue
                 token = chunk.get("message", {}).get("content", "")
                 if token:
-                    yield token
+                    # Suppress think-phase tokens inline
+                    if "<think>" in token:
+                        in_think = True
+                    if not in_think:
+                        yield token
+                    if "</think>" in token:
+                        in_think = False
                 if chunk.get("done"):
                     break
     except httpx.TimeoutException:
@@ -118,6 +149,138 @@ def stream_chat(
         logger.warning("Ollama stream HTTP error: %s (model=%s)", exc, model)
     except Exception as exc:
         logger.exception("Unexpected Ollama stream error: %s", exc)
+
+
+# ── Anthropic internals ──────────────────────────────────────────────
+
+_ANTHROPIC_BASE = "https://api.anthropic.com"
+_ANTHROPIC_VERSION = "2023-06-01"
+
+
+def _anthropic_headers() -> dict[str, str]:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not set. "
+            "Export it before starting CAS: export ANTHROPIC_API_KEY=sk-ant-..."
+        )
+    return {
+        "x-api-key": api_key,
+        "anthropic-version": _ANTHROPIC_VERSION,
+        "content-type": "application/json",
+    }
+
+
+def _split_system(messages: list[dict]) -> tuple[str, list[dict]]:
+    """Separate a leading system message from the rest (Anthropic API format)."""
+    if messages and messages[0]["role"] == "system":
+        return messages[0]["content"], messages[1:]
+    return "", messages
+
+
+def _chat_anthropic(messages: list[dict], model: str, temperature: float) -> str:
+    system, user_messages = _split_system(messages)
+    payload: dict[str, Any] = {
+        "model": model,
+        "max_tokens": 4096,
+        "temperature": temperature,
+        "messages": user_messages,
+    }
+    if system:
+        payload["system"] = system
+    try:
+        resp = httpx.post(
+            f"{_ANTHROPIC_BASE}/v1/messages",
+            headers=_anthropic_headers(),
+            json=payload,
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text_blocks = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
+        return "".join(text_blocks).strip()
+    except httpx.TimeoutException:
+        logger.warning("Anthropic request timed out (model=%s)", model)
+        return ""
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Anthropic HTTP error %s: %s (model=%s)",
+                       exc.response.status_code, exc.response.text, model)
+        return ""
+    except RuntimeError as exc:
+        logger.error("Anthropic config error: %s", exc)
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected Anthropic error: %s", exc)
+        return ""
+
+
+def _stream_anthropic(
+    messages: list[dict], model: str, temperature: float
+) -> Iterator[str]:
+    system, user_messages = _split_system(messages)
+    payload: dict[str, Any] = {
+        "model": model,
+        "max_tokens": 4096,
+        "temperature": temperature,
+        "stream": True,
+        "messages": user_messages,
+    }
+    if system:
+        payload["system"] = system
+    try:
+        with httpx.stream(
+            "POST", f"{_ANTHROPIC_BASE}/v1/messages",
+            headers=_anthropic_headers(),
+            json=payload,
+            timeout=_STREAM_TIMEOUT,
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data_str = line[len("data:"):].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    event = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "content_block_delta":
+                    delta = event.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        token = delta.get("text", "")
+                        if token:
+                            yield token
+    except httpx.TimeoutException:
+        logger.warning("Anthropic stream timed out (model=%s)", model)
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Anthropic stream HTTP error %s (model=%s)",
+                       exc.response.status_code, model)
+    except RuntimeError as exc:
+        logger.error("Anthropic config error: %s", exc)
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected Anthropic stream error: %s", exc)
+
+
+# ── Provider dispatch ────────────────────────────────────────────────
+
+def _chat(messages: list[dict], model: str, temperature: float = 0.7) -> str:
+    if CAS_PROVIDER == "anthropic":
+        return _chat_anthropic(messages, model, temperature)
+    return _chat_ollama(messages, model, temperature)
+
+
+def stream_chat(
+    messages: list[dict],
+    model: str = "",
+    temperature: float = 0.7,
+) -> Iterator[str]:
+    if not model:
+        model = model_for("document")
+    if CAS_PROVIDER == "anthropic":
+        return _stream_anthropic(messages, model, temperature)
+    return _stream_ollama(messages, model, temperature)
 
 
 # ── Type-aware system prompts ────────────────────────────────────────
@@ -163,23 +326,6 @@ _EDIT_SYSTEM = {
         "Output only the updated list — no commentary."
     ),
 }
-
-# ── Chat system prompt ───────────────────────────────────────────────
-#
-# This prompt is used when the message is a plain chat — not a workspace
-# create, edit, or close. The model's job here is narrow and specific.
-#
-# Critical constraints:
-#   - Workspace creation/editing is handled EXTERNALLY by CAS's routing layer.
-#     If a message reached this prompt, the routing layer already decided it is
-#     NOT a workspace operation. Do not second-guess that or simulate one.
-#   - Never ask follow-up questions like "what would you like to name it?" or
-#     "shall I save that?" — CAS handles all workspace lifecycle automatically.
-#   - Never pretend to create, save, or modify a workspace. Only the routing
-#     layer can do that. Saying "workspace created" when nothing was created
-#     is a lie and breaks the user's trust.
-#   - If the user seems to want a workspace, tell them to ask directly using
-#     natural language: "write a ...", "create a ...", "draft a ...".
 
 _CHAT_SYSTEM = """You are CAS — a Conversational Agent Shell.
 
@@ -228,7 +374,8 @@ def generate_workspace_content(
     user_context: str = "",
 ) -> str:
     model = model_for(ws_type)
-    logger.info("generate_workspace_content: type=%s model=%s", ws_type, model)
+    logger.info("generate_workspace_content: type=%s model=%s provider=%s",
+                ws_type, model, CAS_PROVIDER)
     messages = [
         {"role": "system", "content": _ws_system(ws_type, user_context)},
         {"role": "user",   "content": f"Title: {title}\nRequest: {user_message}"},
@@ -249,7 +396,8 @@ def generate_workspace_edit(
     user_context: str = "",
 ) -> str:
     model = model_for(ws_type)
-    logger.info("generate_workspace_edit: type=%s model=%s", ws_type, model)
+    logger.info("generate_workspace_edit: type=%s model=%s provider=%s",
+                ws_type, model, CAS_PROVIDER)
     messages = [
         {"role": "system", "content": _edit_system(ws_type, user_context)},
         {"role": "user",   "content": (

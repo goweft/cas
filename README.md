@@ -30,11 +30,17 @@ Three workspace types:
 - **Code** — raw code files, syntax-appropriate editor settings, no markdown processing
 - **List** — structured checklists, todo lists, and inventories
 
-Each workspace type routes to a different local model:
-- Documents and lists → `qwen3.5:9b` (general reasoning, strong prose)
-- Code → `qwen2.5-coder:7b` (coding-specialized, faster)
+CAS supports two inference backends, selected via `CAS_PROVIDER`:
 
-Everything runs on your hardware. No API calls to external services. No content leaves the machine.
+**Ollama (default)** — local, private, requires GPU:
+- Documents and lists → `qwen3.5:9b`
+- Code → `qwen2.5-coder:7b`
+
+**Anthropic API** — cloud, no GPU required:
+- Documents and lists → `claude-sonnet-4-6`
+- Code → `claude-haiku-4-5-20251001`
+
+By default, everything runs on your hardware. No content leaves the machine. If you prefer a cloud backend, CAS also supports the Anthropic API — no GPU required.
 
 ---
 
@@ -98,7 +104,7 @@ src/cas/
 ├── shell.py       # Session manager, intent detection
 ├── workspaces.py  # Workspace lifecycle, three types
 ├── contracts.py   # Deterministic contract enforcement
-├── llm.py         # Ollama bridge, type-aware prompts, model routing
+├── llm.py         # Multi-provider bridge (Ollama / Anthropic), model routing
 ├── renderer.py    # HTML rendering: cas-doc, cas-code, cas-list
 ├── conductor.py   # Behavioral learning, user context
 ├── store.py       # SQLite persistence
@@ -142,7 +148,6 @@ Working:
 Not yet built:
 
 - Workspace rename from UI
-- Pluggable model backends (Anthropic API, OpenAI)
 - More workspace types (data tables, terminal, code execution)
 - Multi-user or concurrent session support
 - CAS as a login shell / desktop replacement
@@ -151,7 +156,16 @@ Not yet built:
 
 ## Running it
 
-CAS runs as part of the Heddle service:
+### With Ollama (local, GPU required)
+
+Install [Ollama](https://ollama.ai), then pull the models:
+
+```bash
+ollama pull qwen3.5:9b
+ollama pull qwen2.5-coder:7b
+```
+
+Start the service:
 
 ```bash
 sudo systemctl restart loom-dashboard
@@ -159,15 +173,30 @@ sudo systemctl restart loom-dashboard
 
 Then open: `http://localhost:8300/api/cas/`
 
-Direct launch for development:
+### With Anthropic API (no GPU required)
+
+```bash
+export CAS_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+sudo systemctl restart loom-dashboard
+```
+
+Or set in the systemd unit drop-in:
+
+```
+Environment=CAS_PROVIDER=anthropic
+Environment=ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Development
 
 ```bash
 cd ~/projects/loom
 source venv/bin/activate
-python heddle_dashboard.py 8300
+CAS_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... python heddle_dashboard.py 8300
 ```
 
-Tests (338 passing, ~3s):
+### Tests
 
 ```bash
 cd ~/projects/cas
