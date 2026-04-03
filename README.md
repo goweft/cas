@@ -1,10 +1,12 @@
-# CAS — Conversational Agent Shell
+<p align="center"><img src="banner.svg" alt="cas" width="100%"></p>
 
-**A shell where conversation generates workspaces and users control them directly.**
+<h1 align="center">CAS</h1>
+<p align="center"><strong>Conversational Agent Shell</strong></p>
+<p align="center">
+  A shell where conversation generates workspaces and users control them directly.<br>
+  Deterministic contracts · streaming generation · persistent sessions
+</p>
 
-[See It Work](#see-it-work) · [The Idea](#the-idea) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Quick Start](#quick-start)
-
----
 
 ## See It Work
 
