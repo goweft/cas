@@ -1,0 +1,49 @@
+<svg width="660" height="670" viewBox="0 0 660 670" xmlns="http://www.w3.org/2000/svg">
+<style>text { font-family: 'Courier New', Courier, monospace; }
+@keyframes l0{0%,1.2%{opacity:0}3.3%,94%{opacity:1}98%,100%{opacity:0}}.l0{animation:l0 12.0s linear infinite}
+@keyframes l1{0%,2.9%{opacity:0}5.0%,94%{opacity:1}98%,100%{opacity:0}}.l1{animation:l1 12.0s linear infinite}
+@keyframes l2{0%,4.6%{opacity:0}6.7%,94%{opacity:1}98%,100%{opacity:0}}.l2{animation:l2 12.0s linear infinite}
+@keyframes l4{0%,7.9%{opacity:0}10.0%,94%{opacity:1}98%,100%{opacity:0}}.l4{animation:l4 12.0s linear infinite}
+@keyframes l5{0%,8.8%{opacity:0}10.8%,94%{opacity:1}98%,100%{opacity:0}}.l5{animation:l5 12.0s linear infinite}
+@keyframes l7{0%,11.7%{opacity:0}13.7%,94%{opacity:1}98%,100%{opacity:0}}.l7{animation:l7 12.0s linear infinite}
+@keyframes l8{0%,12.5%{opacity:0}14.6%,94%{opacity:1}98%,100%{opacity:0}}.l8{animation:l8 12.0s linear infinite}
+@keyframes l9{0%,13.3%{opacity:0}15.4%,94%{opacity:1}98%,100%{opacity:0}}.l9{animation:l9 12.0s linear infinite}
+@keyframes l11{0%,16.7%{opacity:0}18.8%,94%{opacity:1}98%,100%{opacity:0}}.l11{animation:l11 12.0s linear infinite}
+@keyframes l12{0%,17.5%{opacity:0}19.6%,94%{opacity:1}98%,100%{opacity:0}}.l12{animation:l12 12.0s linear infinite}
+@keyframes l14{0%,22.5%{opacity:0}24.6%,94%{opacity:1}98%,100%{opacity:0}}.l14{animation:l14 12.0s linear infinite}
+@keyframes l15{0%,23.3%{opacity:0}25.4%,94%{opacity:1}98%,100%{opacity:0}}.l15{animation:l15 12.0s linear infinite}
+@keyframes l17{0%,28.3%{opacity:0}30.4%,94%{opacity:1}98%,100%{opacity:0}}.l17{animation:l17 12.0s linear infinite}
+@keyframes l18{0%,29.2%{opacity:0}31.2%,94%{opacity:1}98%,100%{opacity:0}}.l18{animation:l18 12.0s linear infinite}
+@keyframes l20{0%,34.2%{opacity:0}36.2%,94%{opacity:1}98%,100%{opacity:0}}.l20{animation:l20 12.0s linear infinite}
+@keyframes l21{0%,35.0%{opacity:0}37.1%,94%{opacity:1}98%,100%{opacity:0}}.l21{animation:l21 12.0s linear infinite}
+@keyframes l22{0%,35.8%{opacity:0}37.9%,94%{opacity:1}98%,100%{opacity:0}}.l22{animation:l22 12.0s linear infinite}
+@keyframes l24{0%,39.6%{opacity:0}41.7%,94%{opacity:1}98%,100%{opacity:0}}.l24{animation:l24 12.0s linear infinite}
+@keyframes l25{0%,40.4%{opacity:0}42.5%,94%{opacity:1}98%,100%{opacity:0}}.l25{animation:l25 12.0s linear infinite}
+@keyframes l26{0%,41.2%{opacity:0}43.3%,94%{opacity:1}98%,100%{opacity:0}}.l26{animation:l26 12.0s linear infinite}
+@keyframes l28{0%,44.6%{opacity:0}46.7%,94%{opacity:1}98%,100%{opacity:0}}.l28{animation:l28 12.0s linear infinite}
+@keyframes l29{0%,45.4%{opacity:0}47.5%,94%{opacity:1}98%,100%{opacity:0}}.l29{animation:l29 12.0s linear infinite}</style>
+<rect width="660" height="670" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+<rect width="660" height="40" rx="6" ry="6" fill="#161b22"/><circle cx="20" cy="20" r="6" fill="#ff5f56"/><circle cx="40" cy="20" r="6" fill="#ffbd2e"/><circle cx="60" cy="20" r="6" fill="#27c93f"/><text x="330" y="25" text-anchor="middle" fill="#6e7681" font-size="12" font-family="sans-serif">zsh — cas session</text>
+<text class="l0" opacity="0" x="20" y="74"  font-size="13"><tspan fill="#7ee787">$ </tspan><tspan fill="#e6edf3">curl -sN -X POST http://localhost:8300/api/cas/message/stream \</tspan></text>
+<text class="l1" opacity="0" x="20" y="94"  font-size="13"><tspan fill="#6e7681">    -H </tspan><tspan fill="#e6edf3">"Content-Type: application/json" \</tspan></text>
+<text class="l2" opacity="0" x="20" y="114"  font-size="13"><tspan fill="#6e7681">    -d </tspan><tspan fill="#e6edf3">'{"message": "write a proposal for a local AI platform"}'</tspan></text>
+<text class="l4" opacity="0" x="20" y="154"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">session</tspan></text>
+<text class="l5" opacity="0" x="20" y="174"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"session_id": "</tspan><tspan fill="#f2cc60">ses_7f3a2b</tspan><tspan fill="#e6edf3">"} </tspan></text>
+<text class="l7" opacity="0" x="20" y="214"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">intent</tspan></text>
+<text class="l8" opacity="0" x="20" y="234"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"kind": "</tspan><tspan fill="#ffa657">create_workspace</tspan><tspan fill="#e6edf3">", "ws_type": "</tspan><tspan fill="#79c0ff">document</tspan><tspan fill="#e6edf3">",</tspan></text>
+<text class="l9" opacity="0" x="20" y="254"  font-size="13"><tspan fill="#e6edf3">       "title": "</tspan><tspan fill="#7ee787">Local AI Platform Proposal</tspan><tspan fill="#e6edf3">"}</tspan></text>
+<text class="l11" opacity="0" x="20" y="294"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">token</tspan></text>
+<text class="l12" opacity="0" x="20" y="314"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"token": "# Local AI Platform Proposal\\n\\n"}</tspan></text>
+<text class="l14" opacity="0" x="20" y="354"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">token</tspan></text>
+<text class="l15" opacity="0" x="20" y="374"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"token": "## Executive Summary\\n\\nThis proposal..."}</tspan></text>
+<text class="l17" opacity="0" x="20" y="414"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">token</tspan></text>
+<text class="l18" opacity="0" x="20" y="434"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"token": "## Security\\n\\nAll tool calls pass through..."}</tspan></text>
+<text class="l20" opacity="0" x="20" y="474"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">workspace</tspan></text>
+<text class="l21" opacity="0" x="20" y="494"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"id": "</tspan><tspan fill="#f2cc60">ws_1c4e9d</tspan><tspan fill="#e6edf3">", "title": "</tspan><tspan fill="#7ee787">Local AI Platform Proposal</tspan><tspan fill="#e6edf3">",</tspan></text>
+<text class="l22" opacity="0" x="20" y="514"  font-size="13"><tspan fill="#e6edf3">       "type": "</tspan><tspan fill="#79c0ff">document</tspan><tspan fill="#e6edf3">", "is_active": </tspan><tspan fill="#7ee787">true</tspan><tspan fill="#e6edf3">}</tspan></text>
+<text class="l24" opacity="0" x="20" y="554"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">chat_reply</tspan></text>
+<text class="l25" opacity="0" x="20" y="574"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{"text": "Created document workspace. Edit directly or ask for changes.",</tspan></text>
+<text class="l26" opacity="0" x="20" y="594"  font-size="13"><tspan fill="#e6edf3">       "intent": "</tspan><tspan fill="#ffa657">create_workspace</tspan><tspan fill="#e6edf3">"}</tspan></text>
+<text class="l28" opacity="0" x="20" y="634"  font-size="13"><tspan fill="#6e7681">event: </tspan><tspan fill="#79c0ff">done</tspan></text>
+<text class="l29" opacity="0" x="20" y="654"  font-size="13"><tspan fill="#6e7681">data: </tspan><tspan fill="#e6edf3">{}</tspan><tspan fill="#6e7681">  ← workspace created, tokens streamed in 2.4s</tspan></text>
+</svg>
