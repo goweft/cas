@@ -6,6 +6,7 @@ import pytest
 
 from cas.protocols import ExecutionContext, SessionScope
 from cas.shell import Session, Shell
+from cas.memory_store import InMemoryStore
 
 
 class TestSessionExecutionContext:
@@ -28,7 +29,7 @@ class TestSessionExecutionContext:
 
 class TestShellExecutionContextWiring:
     def test_shell_creates_default_context(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         assert shell._default_ctx is not None
 
     def test_shell_accepts_custom_context(self):
@@ -37,25 +38,25 @@ class TestShellExecutionContextWiring:
         assert shell._default_ctx is mock_ctx
 
     def test_create_session_binds_default_context(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         assert session.execution_context is shell._default_ctx
 
     def test_create_session_binds_custom_context(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         custom_ctx = MagicMock(spec=ExecutionContext)
         session = shell.create_session(execution_context=custom_ctx)
         assert session.execution_context is custom_ctx
 
     def test_process_message_preserves_context(self):
         """After processing a message, the session still has its context."""
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "hello")
         assert shell.get_session(session.id).execution_context is shell._default_ctx
 
     def test_different_sessions_can_have_different_contexts(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         ctx_a = MagicMock(spec=ExecutionContext)
         ctx_b = MagicMock(spec=ExecutionContext)
         session_a = shell.create_session(execution_context=ctx_a)

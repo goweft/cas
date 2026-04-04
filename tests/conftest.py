@@ -1,15 +1,20 @@
-"""CAS test configuration."""
+"""CAS test configuration.
+
+All fixtures are autouse so every test gets:
+  - LLM calls stubbed (no Ollama/Anthropic calls)
+  - Conductor persistence disabled (no ~/.cas/profile.json)
+  - Auditor mocked (no Heddle dependency)
+  - InMemoryStore instead of CASStore (no ~/.cas/cas.db)
+  - LocalExecutionContext mocked (no filesystem side effects)
+"""
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-heddle_src = Path(__file__).parent.parent.parent / "loom" / "src"
-if heddle_src.exists() and str(heddle_src) not in sys.path:
-    sys.path.insert(0, str(heddle_src))
-
 from cas.memory_store import InMemoryStore
+from cas.shell import Shell
 
 
 def _stub_workspace_content(title, user_message, ws_type="document", user_context=""):
@@ -26,7 +31,6 @@ def _stub_stream_chat(messages, model="", temperature=0.7):
         yield token
 
 
-# Fresh conductor defaults — kept in sync with Conductor._defaults()
 _CONDUCTOR_DEFAULTS = {
     "doc_types": {},
     "ws_types": {},
@@ -65,23 +69,26 @@ def mock_auditor():
 
 
 @pytest.fixture(autouse=True)
-def in_memory_store():
-    """Replace CASStore with InMemoryStore so tests exercise real store
-    logic without touching ~/.cas/cas.db.
-
-    Unlike the previous MagicMock approach, this means session save/load,
-    message persistence, and workspace history all work for real inside
-    tests — the only thing bypassed is SQLite.
-    """
-    store = InMemoryStore()
-    with patch("cas.shell.CASStore", return_value=store):
-        yield store
-
-
-@pytest.fixture(autouse=True)
 def mock_execution_context():
-    """Replace LocalExecutionContext so tests don't create ~/.cas/workspaces/."""
+    """Prevent LocalExecutionContext from touching the filesystem."""
     mock_ctx = MagicMock()
     mock_ctx.scope = MagicMock()
     with patch("cas.shell.LocalExecutionContext", return_value=mock_ctx):
         yield mock_ctx
+
+
+@pytest.fixture
+def store():
+    """A clean InMemoryStore — no SQLite, no ~/.cas/cas.db."""
+    return InMemoryStore()
+
+
+@pytest.fixture
+def shell(store):
+    """A Shell wired to an isolated InMemoryStore.
+
+    This is the canonical way to get a Shell in tests. Every test
+    that uses this fixture starts with a clean, empty store — no
+    persisted state from previous runs or other tests.
+    """
+    return Shell(store=store)

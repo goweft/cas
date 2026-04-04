@@ -6,11 +6,12 @@ from fastapi.testclient import TestClient
 
 from cas.api import create_router
 from cas.shell import Shell
+from cas.memory_store import InMemoryStore
 
 
 @pytest.fixture
 def client():
-    shell = Shell()
+    shell = Shell(store=InMemoryStore())
     app = FastAPI()
     app.include_router(create_router(shell))
     return TestClient(app)

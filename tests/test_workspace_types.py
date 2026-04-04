@@ -7,11 +7,12 @@ from fastapi.testclient import TestClient
 from cas.shell import Shell, detect_intent
 from cas.renderer import render, render_with_styles
 from cas.api import create_router
+from cas.memory_store import InMemoryStore
 
 
 @pytest.fixture
 def client():
-    shell = Shell()
+    shell = Shell(store=InMemoryStore())
     app = FastAPI()
     app.include_router(create_router(shell))
     return TestClient(app)
@@ -120,27 +121,27 @@ class TestTypeAwareRenderer:
 class TestShellTypeRouting:
 
     def test_code_workspace_created_with_correct_type(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         resp = shell.process_message(session.id, "write a python script to sort a list")
         assert resp.workspace is not None
         assert resp.workspace.type == "code"
 
     def test_list_workspace_created_with_correct_type(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         resp = shell.process_message(session.id, "create a todo list for the project")
         assert resp.workspace is not None
         assert resp.workspace.type == "list"
 
     def test_document_workspace_default_type(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         resp = shell.process_message(session.id, "write a project proposal")
         assert resp.workspace.type == "document"
 
     def test_reply_includes_type_name(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         resp = shell.process_message(session.id, "write a python script to parse csv")
         assert "code" in resp.chat_reply.lower()

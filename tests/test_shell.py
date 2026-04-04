@@ -7,6 +7,7 @@ history tracking, and response structure.
 
 import pytest
 
+from cas.memory_store import InMemoryStore
 from cas.shell import (
     Intent,
     Message,
@@ -145,26 +146,26 @@ class TestIntentDetection:
 
 class TestSessionLifecycle:
     def test_create_session(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         assert len(session.id) == 12
         assert session.created_at is not None
         assert session.history == []
 
     def test_create_multiple_sessions(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         s1 = shell.create_session()
         s2 = shell.create_session()
         assert s1.id != s2.id
 
     def test_get_session(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         s = shell.create_session()
         fetched = shell.get_session(s.id)
         assert fetched is s
 
     def test_get_nonexistent_session_raises(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         with pytest.raises(KeyError, match="No session"):
             shell.get_session("nonexistent")
 
@@ -174,7 +175,7 @@ class TestSessionLifecycle:
 
 class TestConversationHistory:
     def test_messages_recorded(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "hello")
 
@@ -184,7 +185,7 @@ class TestConversationHistory:
         assert session.history[1].role == "shell"
 
     def test_multiple_messages_accumulate(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "hello")
         shell.process_message(session.id, "how are you")
@@ -192,7 +193,7 @@ class TestConversationHistory:
         assert len(session.history) == 4  # 2 user + 2 shell
 
     def test_message_has_timestamp(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "hello")
 
@@ -205,7 +206,7 @@ class TestConversationHistory:
 
 class TestWorkspaceCreationViaChat:
     def test_create_workspace_from_message(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "write a project proposal")
 
@@ -216,7 +217,7 @@ class TestWorkspaceCreationViaChat:
         assert "workspace" in response.chat_reply.lower()
 
     def test_workspace_title_from_message(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "draft a budget report")
 
@@ -224,14 +225,14 @@ class TestWorkspaceCreationViaChat:
         assert response.workspace.title != ""
 
     def test_workspace_has_initial_content(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "write a project proposal")
 
         assert response.workspace.content.startswith("#")
 
     def test_workspace_registered_in_manager(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "create a document about testing")
 
@@ -240,7 +241,7 @@ class TestWorkspaceCreationViaChat:
         assert active[0].id == response.workspace.id
 
     def test_workspace_bound_to_contract(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "write a memo")
 
@@ -249,7 +250,7 @@ class TestWorkspaceCreationViaChat:
         assert ws.contract.agent_name == "cas-workspace"
 
     def test_multiple_creates_make_multiple_workspaces(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "write a proposal")
         shell.process_message(session.id, "draft a report")
@@ -262,7 +263,7 @@ class TestWorkspaceCreationViaChat:
 
 class TestWorkspaceEditViaChat:
     def test_edit_updates_most_recent_workspace(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "write a proposal")
         response = shell.process_message(session.id, "add a section for budget")
@@ -273,7 +274,7 @@ class TestWorkspaceEditViaChat:
         assert "Updated workspace" in response.chat_reply
 
     def test_edit_with_no_workspace_returns_message(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "edit the introduction")
 
@@ -281,7 +282,7 @@ class TestWorkspaceEditViaChat:
         assert "No active workspace" in response.chat_reply
 
     def test_edit_targets_latest_active(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         r1 = shell.process_message(session.id, "write a first doc")
         r2 = shell.process_message(session.id, "write a second doc")
@@ -296,7 +297,7 @@ class TestWorkspaceEditViaChat:
 
 class TestWorkspaceCloseViaChat:
     def test_close_most_recent_workspace(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "write a proposal")
         response = shell.process_message(session.id, "close the document")
@@ -307,7 +308,7 @@ class TestWorkspaceCloseViaChat:
         assert "Closed workspace" in response.chat_reply
 
     def test_close_with_no_workspace_returns_message(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "close the workspace")
 
@@ -315,7 +316,7 @@ class TestWorkspaceCloseViaChat:
         assert "No active workspace" in response.chat_reply
 
     def test_close_reduces_active_count(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "write a doc")
         shell.process_message(session.id, "draft a report")
@@ -330,7 +331,7 @@ class TestWorkspaceCloseViaChat:
 
 class TestChatFallback:
     def test_non_workspace_message_returns_chat(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "hello there")
 
@@ -344,7 +345,7 @@ class TestChatFallback:
 
 class TestResponseSerialization:
     def test_response_to_dict_with_workspace(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "write a memo")
         d = response.to_dict()
@@ -355,7 +356,7 @@ class TestResponseSerialization:
         assert d["intent"] == "create_workspace"
 
     def test_response_to_dict_without_workspace(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         response = shell.process_message(session.id, "hello")
         d = response.to_dict()
@@ -388,7 +389,7 @@ class TestCustomContractConfig:
 
 class TestSessionIsolation:
     def test_sessions_have_independent_history(self):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         s1 = shell.create_session()
         s2 = shell.create_session()
 
@@ -402,7 +403,7 @@ class TestSessionIsolation:
 
     def test_sessions_share_workspace_manager(self):
         """All sessions in a shell share the same WorkspaceManager."""
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         s1 = shell.create_session()
         s2 = shell.create_session()
 

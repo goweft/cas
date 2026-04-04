@@ -3,6 +3,8 @@ import pytest
 from unittest.mock import MagicMock, call, patch
 
 from cas.shell import Shell, detect_intent
+from cas.api import _safe_filename
+from cas.memory_store import InMemoryStore
 
 
 class TestExpandedEditPatterns:
@@ -41,12 +43,12 @@ class TestAuditWiring:
     """Verify CasAuditor is called at the right lifecycle points."""
 
     def test_session_create_audited(self, mock_auditor):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         mock_auditor.log_session_create.assert_called_once_with(session.id)
 
     def test_workspace_create_audited(self, mock_auditor):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         resp = shell.process_message(session.id, "draft a resume")
         mock_auditor.log_workspace_create.assert_called_once()
@@ -55,7 +57,7 @@ class TestAuditWiring:
         assert args[0][1] == session.id
 
     def test_workspace_update_audited(self, mock_auditor):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "draft a resume")
         shell.process_message(session.id, "add an executive summary section")
@@ -65,14 +67,14 @@ class TestAuditWiring:
         assert "executive summary" in args[0][2]  # edit_request
 
     def test_workspace_close_audited(self, mock_auditor):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "draft a memo")
         shell.process_message(session.id, "close the document")
         mock_auditor.log_workspace_close.assert_called_once()
 
     def test_no_audit_on_chat(self, mock_auditor):
-        shell = Shell()
+        shell = Shell(store=InMemoryStore())
         session = shell.create_session()
         shell.process_message(session.id, "hello there")
         mock_auditor.log_workspace_create.assert_not_called()
@@ -83,7 +85,6 @@ class TestExportFilename:
     """Test the _safe_filename helper via the export logic."""
 
     def test_safe_filename(self):
-        from cas.api import _safe_filename
         assert _safe_filename("Project Proposal") == "project-proposal"
         assert _safe_filename("Resume For A Senior Python Developer") == "resume-for-a-senior-python-developer"
         assert _safe_filename("Q1 Report!!!") == "q1-report"
@@ -91,7 +92,6 @@ class TestExportFilename:
         assert _safe_filename("   ") == "document"
 
     def test_safe_filename_special_chars(self):
-        from cas.api import _safe_filename
         result = _safe_filename("Plan: Phase 1/2")
         assert "/" not in result
         assert ":" not in result
