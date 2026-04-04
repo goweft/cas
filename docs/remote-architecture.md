@@ -159,3 +159,46 @@ Nothing in Shell or workspace code knows this is remote. The abstraction boundar
 - **Workspace portability:** If execution context changes, workspace paths need remapping. Roots should be relative.
 - **Offline resilience:** Remote AI unreachable → fail explicitly, not silently degrade.
 - **Contract scope granularity:** Per-session scope sufficient? Start there; refine if too coarse.
+
+---
+
+## Transport Protocol Decision: SSE vs WebSockets
+
+**Date recorded:** 2026-04-03  
+**Trigger:** External review correctly identified a future architectural constraint.
+
+### Current state
+
+The streaming pipeline uses Server-Sent Events (SSE) via FastAPI's `StreamingResponse`. Every message flows through a single unidirectional stream: `session → intent → token×N → workspace? → chat_reply → done`. This works well for all three current workspace types — the server pushes, the client receives, no back-channel needed.
+
+### The constraint
+
+SSE is strictly unidirectional (server → client only). This is fine for text generation but is architecturally incompatible with interactive code execution, which requires:
+
+- **stdin** — client → server (send input to a running process)
+- **stdout + stderr** — server → client, interleaved, unbuffered
+- **control signals** — client → server (interrupt, kill, terminal resize)
+
+There is no clean way to retrofit stdin over SSE. A secondary POST endpoint for stdin creates ordering races and state management complexity the protocol was never designed to handle.
+
+### Decision
+
+**Keep SSE for generation workspaces. Use WebSockets for the code execution workspace when that feature is built.**
+
+This is an intentional protocol split, not a migration:
+
+| Workspace type | Protocol | Reason |
+|---|---|---|
+| document, code (editor), list | SSE | Unidirectional, simple, works today |
+| terminal / code execution | WebSockets | Bidirectional required for stdin/stdout/signals |
+
+FastAPI supports both `StreamingResponse` (SSE) and `WebSocket` endpoints natively. No architectural surgery needed — the execution workspace opens a `ws://` connection instead of consuming an SSE stream.
+
+### What to avoid
+
+- Do not retrofit stdin onto SSE via polling or a secondary POST endpoint — this is racy and wrong.
+- Do not preemptively migrate all streaming to WebSockets — SSE is simpler for generation-only workspaces and there is no reason to pay the WebSocket handshake cost where bidirectionality is never needed.
+
+### Implementation note (for when code execution is built)
+
+The WebSocket endpoint should live at `/api/cas/workspace/{id}/exec/ws`. The contract layer enforces permitted commands before any process spawns. `ExecutionContext.execute()` is the intended delegation point — it already enforces scope, timeout, and allowed operations.
