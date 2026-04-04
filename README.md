@@ -88,7 +88,7 @@ A Conductor module observes usage patterns and builds a profile that feeds back 
 
 [![CAS architecture](https://github.com/gostev/cas/raw/master/docs/assets/architecture.svg)](docs/assets/architecture.svg)
 
-CAS is a split-panel web interface that mounts inside [Heddle](https://github.com/goweft/heddle), a local MCP mesh runtime. The left panel holds a persistent conversation. The right panel holds workspace tabs that appear in response to what you say.
+CAS is a split-panel web interface: a persistent conversation on the left, workspace tabs on the right. It runs standalone via `dev_server.py`, or mounts inside [Heddle](https://github.com/goweft/heddle) as a FastAPI router for richer security and audit logging.
 
 Three workspace types, each with its own model, renderer, and editor settings:
 
@@ -160,50 +160,41 @@ Planned:
 
 ## Quick Start
 
-### With Ollama (local, GPU required)
-
-Install [Ollama](https://ollama.ai), then pull the models:
-
 ```bash
-ollama pull qwen3.5:9b
-ollama pull qwen2.5-coder:7b
+git clone https://github.com/goweft/cas.git
+cd cas
+python -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
 ```
-
-Start the service:
-
-```bash
-sudo systemctl restart loom-dashboard
-```
-
-Then open: `http://localhost:8300/api/cas/`
 
 ### With Anthropic API (no GPU required)
+
+The fastest way to get started — no local model needed:
 
 ```bash
 export CAS_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
-sudo systemctl restart loom-dashboard
+python dev_server.py
 ```
 
-Or set in the systemd unit drop-in:
+Open: `http://localhost:8301/api/cas/`
 
-```
-Environment=CAS_PROVIDER=anthropic
-Environment=ANTHROPIC_API_KEY=sk-ant-...
-```
+### With Ollama (local, private)
 
-### Development
+Install [Ollama](https://ollama.ai), pull the models, then run:
 
 ```bash
-cd ~/projects/loom
-source venv/bin/activate
-CAS_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... python heddle_dashboard.py 8300
+ollama pull qwen3.5:9b
+ollama pull qwen2.5-coder:7b
+python dev_server.py
 ```
+
+CAS defaults to Ollama when `CAS_PROVIDER` is not set.
 
 ### Tests
 
 ```bash
-cd ~/projects/cas
 python -m pytest tests/ -q
 ```
 
