@@ -795,7 +795,7 @@ func (m Model) renderTabContent(tab tabState, w, h int) string {
 		rendered = styleCode.Render(tab.content)
 	} else {
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStandardStyle("dark"),
 			glamour.WithWordWrap(w),
 		)
 		if err == nil {
