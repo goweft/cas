@@ -163,8 +163,8 @@ cmd/cas/         Entry point: --db, --memory flags
 ## Quick Start
 
 ```bash
-git clone https://github.com/goweft/cas-go.git
-cd cas-go
+git clone https://github.com/goweft/cas.git
+cd cas
 go build -o cas ./cmd/cas
 ```
 
