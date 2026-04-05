@@ -1,11 +1,13 @@
 // Package ui implements the CAS terminal interface using Bubble Tea.
 //
-// Layout: split panel — chat (40%) on the left, workspace (60%) on the right.
+// Layout: split panel — chat (40%) left, tabbed workspace (60%) right.
 //
-// Streaming pattern: a channel stored in Model feeds one token per tea.Cmd
-// tick into the event loop. This is the correct Bubble Tea approach — a
-// goroutine fills the channel, a recursive cmd drains it one item at a time,
-// and a final responseMsg signals completion.
+// Tabs: each open workspace is a tab. '[' / ']' navigate tabs when the
+// workspace panel is focused. A placeholder tab is created at submit time
+// for create intents so streaming content lands in the right place.
+//
+// Streaming: a buffered channel stored in Model feeds one event per
+// tea.Cmd tick into the event loop (correct Bubble Tea pattern).
 package ui
 
 import (
@@ -29,20 +31,9 @@ var (
 	colWorkspace = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 	colDim       = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#5C5C5C"}
 
-	stylePanel = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colBorder).
-			Padding(0, 1)
-
-	styleActivePanel = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colActive).
-				Padding(0, 1)
-
-	styleWSPanel = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colWorkspace).
-			Padding(0, 1)
+	stylePanel       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colBorder).Padding(0, 1)
+	styleActivePanel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colActive).Padding(0, 1)
+	styleWSPanel     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colWorkspace).Padding(0, 1)
 
 	styleTitle  = lipgloss.NewStyle().Foreground(colActive).Bold(true)
 	styleWSType = lipgloss.NewStyle().Foreground(colWorkspace).Italic(true)
@@ -52,11 +43,39 @@ var (
 	styleInput  = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
 	styleStatus = lipgloss.NewStyle().Foreground(colDim).Italic(true)
 	styleCode   = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
+
+	styleTabActive = lipgloss.NewStyle().
+			Foreground(colWorkspace).
+			Bold(true).
+			Padding(0, 1)
+
+	styleTabInactive = lipgloss.NewStyle().
+				Foreground(colDim).
+				Padding(0, 1)
 )
 
-// ── Stream event ─────────────────────────────────────────────────
-// streamEvent is a discriminated union sent over the stream channel.
-// Either Token is set (mid-stream) or Resp/Err are set (final).
+// ── Tab state ─────────────────────────────────────────────────────
+
+// tabState holds the display state for one workspace tab.
+// ws is nil while the workspace is still being generated (placeholder tab).
+type tabState struct {
+	ws      *workspace.Workspace // nil until generation completes
+	title   string               // display title (placeholder or confirmed)
+	wsType  string               // "document" | "code" | "list"
+	content string               // current displayed content
+	scroll  int                  // scroll offset in lines
+}
+
+func tabFromWorkspace(ws *workspace.Workspace) tabState {
+	return tabState{
+		ws:      ws,
+		title:   ws.Title,
+		wsType:  ws.Type,
+		content: ws.Content,
+	}
+}
+
+// ── Stream event ──────────────────────────────────────────────────
 
 type streamEvent struct {
 	Token string
@@ -91,38 +110,41 @@ type Model struct {
 	// Chat
 	messages   []shell.Message
 	input      string
-	chatScroll int // how many lines scrolled up in chat history
+	chatScroll int
 
-	// Workspace
-	activeWS  *workspace.Workspace
-	wsContent string // raw accumulated content (may be mid-stream)
-	wsScroll  int    // line offset in workspace pane
+	// Workspace tabs
+	tabs      []tabState
+	activeTab int
 
 	// Streaming
 	streaming bool
 	streamBuf strings.Builder
-	streamCh  chan streamEvent // non-nil while streaming
+	streamCh  chan streamEvent
 
 	// Layout
 	width  int
 	height int
 	focus  Focus
 
-	// Status / error
+	// Status
 	status string
 }
 
-// New returns a model seeded with existing history and active workspace.
-func New(sh *shell.Shell, sessionID string, history []shell.Message, activeWS *workspace.Workspace) Model {
+// New creates a model seeded with existing session state.
+// workspaces should be the active (non-closed) workspaces in creation order;
+// the last one becomes the active tab.
+func New(sh *shell.Shell, sessionID string, history []shell.Message, workspaces []*workspace.Workspace) Model {
 	m := Model{
 		sh:        sh,
 		sessionID: sessionID,
 		messages:  history,
 		focus:     FocusChat,
 	}
-	if activeWS != nil {
-		m.activeWS = activeWS
-		m.wsContent = activeWS.Content
+	for _, ws := range workspaces {
+		m.tabs = append(m.tabs, tabFromWorkspace(ws))
+	}
+	if len(m.tabs) > 0 {
+		m.activeTab = len(m.tabs) - 1
 	}
 	return m
 }
@@ -143,37 +165,80 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tokenMsg:
-		// One token arrived — update display and schedule reading the next
 		m.streamBuf.WriteString(string(msg))
-		m.wsContent = m.streamBuf.String()
+		// Update the active tab's content live as tokens arrive
+		if m.activeTab < len(m.tabs) {
+			m.tabs[m.activeTab].content = m.streamBuf.String()
+		}
 		return m, listenStream(m.streamCh)
 
 	case responseMsg:
-		// Stream complete
-		m.streaming = false
-		m.streamCh = nil
-		m.status = ""
-		if msg.err != nil {
-			m.status = "error: " + msg.err.Error()
-			return m, nil
+		return m.handleResponse(msg)
+	}
+
+	return m, nil
+}
+
+func (m Model) handleResponse(msg responseMsg) (Model, tea.Cmd) {
+	m.streaming = false
+	m.streamCh = nil
+	m.status = ""
+
+	if msg.err != nil {
+		m.status = "error: " + msg.err.Error()
+		// Remove placeholder tab if we added one
+		if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].ws == nil {
+			m.tabs = append(m.tabs[:m.activeTab], m.tabs[m.activeTab+1:]...)
+			m.activeTab = clamp(m.activeTab-1, 0, len(m.tabs)-1)
 		}
-		resp := msg.resp
-		m.messages = append(m.messages, shell.Message{
-			Role: "shell", Text: resp.ChatReply,
-		})
-		if resp.Workspace != nil {
-			m.activeWS = resp.Workspace
-			m.wsContent = resp.Workspace.Content
-			m.wsScroll = 0
-		}
-		if resp.Intent == intent.KindClose {
-			m.activeWS = nil
-			m.wsContent = ""
-		}
-		m.streamBuf.Reset()
 		return m, nil
 	}
 
+	resp := msg.resp
+	m.messages = append(m.messages, shell.Message{Role: "shell", Text: resp.ChatReply})
+
+	if resp.Workspace != nil {
+		ws := resp.Workspace
+
+		if resp.Intent == intent.KindClose {
+			// Remove the closed workspace's tab
+			for i, tab := range m.tabs {
+				if tab.ws != nil && tab.ws.ID == ws.ID {
+					m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
+					m.activeTab = clamp(m.activeTab, 0, len(m.tabs)-1)
+					break
+				}
+			}
+		} else {
+			// Find existing confirmed tab for this workspace ID
+			found := -1
+			for i, tab := range m.tabs {
+				if tab.ws != nil && tab.ws.ID == ws.ID {
+					found = i
+					break
+				}
+			}
+			if found >= 0 {
+				// Update existing confirmed tab (edit)
+				m.tabs[found].ws = ws
+				m.tabs[found].title = ws.Title
+				m.tabs[found].content = ws.Content
+				m.activeTab = found
+			} else if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].ws == nil {
+				// Confirm the placeholder tab (create)
+				m.tabs[m.activeTab].ws = ws
+				m.tabs[m.activeTab].title = ws.Title
+				m.tabs[m.activeTab].wsType = ws.Type
+				m.tabs[m.activeTab].content = ws.Content
+			} else {
+				// Fallback: no placeholder found, append new tab
+				m.tabs = append(m.tabs, tabFromWorkspace(ws))
+				m.activeTab = len(m.tabs) - 1
+			}
+		}
+	}
+
+	m.streamBuf.Reset()
 	return m, nil
 }
 
@@ -215,8 +280,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyUp:
 		switch m.focus {
 		case FocusWorkspace:
-			if m.wsScroll > 0 {
-				m.wsScroll--
+			if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].scroll > 0 {
+				m.tabs[m.activeTab].scroll--
 			}
 		case FocusChat:
 			if m.chatScroll < len(m.messages) {
@@ -228,7 +293,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyDown:
 		switch m.focus {
 		case FocusWorkspace:
-			m.wsScroll++
+			if m.activeTab < len(m.tabs) {
+				m.tabs[m.activeTab].scroll++
+			}
 		case FocusChat:
 			if m.chatScroll > 0 {
 				m.chatScroll--
@@ -237,17 +304,36 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPgUp:
-		m.wsScroll -= 10
-		if m.wsScroll < 0 {
-			m.wsScroll = 0
+		if m.focus == FocusWorkspace && m.activeTab < len(m.tabs) {
+			m.tabs[m.activeTab].scroll -= 10
+			if m.tabs[m.activeTab].scroll < 0 {
+				m.tabs[m.activeTab].scroll = 0
+			}
 		}
 		return m, nil
 
 	case tea.KeyPgDown:
-		m.wsScroll += 10
+		if m.focus == FocusWorkspace && m.activeTab < len(m.tabs) {
+			m.tabs[m.activeTab].scroll += 10
+		}
 		return m, nil
 
 	case tea.KeyRunes:
+		// Tab navigation — only in workspace focus, not during text input
+		if m.focus == FocusWorkspace {
+			switch string(msg.Runes) {
+			case "[":
+				if m.activeTab > 0 {
+					m.activeTab--
+				}
+				return m, nil
+			case "]":
+				if m.activeTab < len(m.tabs)-1 {
+					m.activeTab++
+				}
+				return m, nil
+			}
+		}
 		if m.focus == FocusChat && !m.streaming {
 			m.input += string(msg.Runes)
 		}
@@ -257,18 +343,32 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// submitMessage sends the input to the shell and sets up the stream loop.
+// submitMessage detects intent locally so it can prepare a placeholder tab
+// for creates before the shell responds. This ensures streaming tokens land
+// in the correct tab rather than being lost.
 func (m Model) submitMessage() (Model, tea.Cmd) {
 	message := strings.TrimSpace(m.input)
+	in := intent.Detect(message)
+
 	m.input = ""
 	m.messages = append(m.messages, shell.Message{Role: "user", Text: message})
 	m.streaming = true
 	m.streamBuf.Reset()
-	m.wsContent = ""
-	m.wsScroll = 0
 	m.status = "thinking…"
 
-	// Buffered channel — goroutine never blocks on slow event loop
+	// For creates: add a placeholder tab now so tokens have a home
+	if in.Kind == intent.KindCreate {
+		title := in.TitleHint
+		if title == "" {
+			title = "New Workspace"
+		}
+		m.tabs = append(m.tabs, tabState{
+			title:  title,
+			wsType: string(in.WSType),
+		})
+		m.activeTab = len(m.tabs) - 1
+	}
+
 	ch := make(chan streamEvent, 512)
 	m.streamCh = ch
 
@@ -287,13 +387,10 @@ func (m Model) submitMessage() (Model, tea.Cmd) {
 	return m, listenStream(ch)
 }
 
-// listenStream returns a tea.Cmd that reads exactly one event from ch.
-// Called recursively from Update until the stream closes.
 func listenStream(ch chan streamEvent) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
 		if !ok {
-			// Channel closed without sending a final event — shouldn't happen
 			return responseMsg{err: fmt.Errorf("stream closed unexpectedly")}
 		}
 		if ev.Resp != nil || ev.Err != nil {
@@ -310,7 +407,6 @@ func (m Model) View() string {
 		return "Loading…"
 	}
 
-	// 40% chat, 60% workspace, leaving 2 chars between panels
 	chatW := m.width * 40 / 100
 	wsW := m.width - chatW - 2
 	if chatW < 28 {
@@ -324,21 +420,21 @@ func (m Model) View() string {
 	chatPane := m.renderChat(chatW, innerH)
 	wsPane := m.renderWorkspace(wsW, innerH)
 	row := lipgloss.JoinHorizontal(lipgloss.Top, chatPane, " ", wsPane)
-
 	return lipgloss.JoinVertical(lipgloss.Left, row, m.renderStatus())
 }
+
+// ── Chat pane ─────────────────────────────────────────────────────
 
 func (m Model) renderChat(w, h int) string {
 	st := stylePanel
 	if m.focus == FocusChat {
 		st = styleActivePanel
 	}
-	st = st.Width(w - 2) // subtract border
+	st = st.Width(w - 2)
 
-	// Build message lines (newest last)
 	var lines []string
 	for _, msg := range m.messages {
-		wrapped := wordWrap(msg.Text, w-6)
+		wrapped := wordWrap(msg.Text, w-8)
 		if msg.Role == "user" {
 			for i, l := range wrapped {
 				if i == 0 {
@@ -359,13 +455,11 @@ func (m Model) renderChat(w, h int) string {
 		lines = append(lines, "")
 	}
 
-	// Input area takes 2 lines at bottom
 	histH := h - 5
 	if histH < 0 {
 		histH = 0
 	}
 
-	// Apply chat scroll (scroll up = show older messages)
 	total := len(lines)
 	end := total - m.chatScroll
 	if end < 0 {
@@ -376,7 +470,6 @@ func (m Model) renderChat(w, h int) string {
 		start = 0
 	}
 	visible := lines[start:end]
-	// Pad to fill height
 	for len(visible) < histH {
 		visible = append([]string{""}, visible...)
 	}
@@ -385,17 +478,18 @@ func (m Model) renderChat(w, h int) string {
 	if m.streaming {
 		cursor = styleDim.Render("…")
 	}
-	inputLine := styleInput.Render("> " + m.input + cursor)
-
 	sep := styleDim.Render(strings.Repeat("─", w-4))
+	inputLine := styleInput.Render("> " + m.input + cursor)
 	content := strings.Join(visible, "\n") + "\n" + sep + "\n" + inputLine
 	return st.Render(content)
 }
 
+// ── Workspace pane ────────────────────────────────────────────────
+
 func (m Model) renderWorkspace(w, h int) string {
 	st := styleWSPanel.Width(w - 2)
 
-	if m.activeWS == nil && !m.streaming {
+	if len(m.tabs) == 0 {
 		hint := styleDim.Render(
 			"No workspace open.\n\n" +
 				"  write a project proposal\n" +
@@ -405,67 +499,94 @@ func (m Model) renderWorkspace(w, h int) string {
 		return st.Render(hint)
 	}
 
-	// Header
-	title := "generating…"
-	wsType := ""
-	if m.activeWS != nil {
-		title = m.activeWS.Title
-		wsType = m.activeWS.Type
-	}
-	header := styleTitle.Render(title)
-	if wsType != "" {
-		header += "  " + styleWSType.Render("["+wsType+"]")
-	}
+	// Tab bar (1 line)
+	tabBar := m.renderTabBar(w - 4)
+
+	// Separator
 	sep := styleDim.Render(strings.Repeat("─", w-4))
 
-	// Content — render markdown for document/list, raw for code
-	contentArea := h - 3 // header + sep + padding
-	body := m.renderContent(wsType, m.wsContent, w-4, contentArea)
+	// Content area: total height minus tab bar, sep, padding
+	contentH := h - 4
+	if contentH < 1 {
+		contentH = 1
+	}
 
-	return st.Render(header + "\n" + sep + "\n" + body)
+	tab := m.tabs[m.activeTab]
+	body := m.renderTabContent(tab, w-4, contentH)
+
+	return st.Render(tabBar + "\n" + sep + "\n" + body)
 }
 
-// renderContent applies glamour markdown for documents and lists,
-// raw monospace for code, with scroll offset applied.
-func (m Model) renderContent(wsType, content string, w, h int) string {
-	if content == "" {
+func (m Model) renderTabBar(w int) string {
+	var parts []string
+	for i, tab := range m.tabs {
+		// Type badge: first letter of type, or "?" for placeholders
+		badge := "?"
+		if len(tab.wsType) > 0 {
+			badge = string(tab.wsType[0]) // d, c, l
+		}
+
+		title := truncate(tab.title, 18)
+		if tab.ws == nil {
+			title += "…" // still generating
+		}
+		label := fmt.Sprintf("[%s] %s", badge, title)
+
+		if i == m.activeTab {
+			parts = append(parts, styleTabActive.Render(label))
+		} else {
+			parts = append(parts, styleTabInactive.Render(label))
+		}
+	}
+
+	bar := strings.Join(parts, " ")
+	// Truncate if it overflows the pane width
+	runes := []rune(bar)
+	if len(runes) > w {
+		bar = string(runes[:w])
+	}
+	return bar
+}
+
+func (m Model) renderTabContent(tab tabState, w, h int) string {
+	if tab.content == "" {
 		if m.streaming {
 			return styleDim.Render("generating…")
 		}
-		return ""
+		return styleDim.Render("(empty)")
 	}
 
 	var rendered string
-	if wsType == "code" {
-		// Raw code — monospace, no markdown processing
-		rendered = styleCode.Render(content)
+	if tab.wsType == "code" {
+		rendered = styleCode.Render(tab.content)
 	} else {
-		// Markdown via glamour
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
 			glamour.WithWordWrap(w),
 		)
 		if err == nil {
-			if out, err := renderer.Render(content); err == nil {
+			if out, err := renderer.Render(tab.content); err == nil {
 				rendered = strings.TrimRight(out, "\n")
 			} else {
-				rendered = content
+				rendered = tab.content
 			}
 		} else {
-			rendered = content
+			rendered = tab.content
 		}
 	}
 
 	lines := strings.Split(rendered, "\n")
 
-	// Clamp scroll
 	maxScroll := len(lines) - h
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	scroll := m.wsScroll
+	scroll := tab.scroll
 	if scroll > maxScroll {
 		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
 	}
 
 	end := scroll + h
@@ -474,13 +595,9 @@ func (m Model) renderContent(wsType, content string, w, h int) string {
 	}
 	visible := lines[scroll:end]
 
-	// Scroll indicator
-	if len(lines) > h {
-		pct := 0
-		if maxScroll > 0 {
-			pct = scroll * 100 / maxScroll
-		}
-		indicator := styleDim.Render(fmt.Sprintf(" ↕ %d%% ", pct))
+	if len(lines) > h && maxScroll > 0 {
+		pct := scroll * 100 / maxScroll
+		indicator := styleDim.Render(fmt.Sprintf(" ↕ %d%%", pct))
 		if len(visible) > 0 {
 			visible[len(visible)-1] = indicator
 		}
@@ -489,22 +606,33 @@ func (m Model) renderContent(wsType, content string, w, h int) string {
 	return strings.Join(visible, "\n")
 }
 
+// ── Status bar ────────────────────────────────────────────────────
+
 func (m Model) renderStatus() string {
 	if m.status != "" {
 		return styleStatus.Render(" " + m.status)
 	}
+
 	hints := []string{
 		styleDim.Render("tab: switch panel"),
-		styleDim.Render("↑↓: scroll"),
 		styleDim.Render("enter: send"),
 		styleDim.Render("ctrl+c: quit"),
 	}
+
+	if m.focus == FocusWorkspace {
+		hints = append([]string{
+			styleDim.Render("[/]: prev/next tab"),
+			styleDim.Render("↑↓/pgup/pgdn: scroll"),
+		}, hints...)
+	} else {
+		hints = append([]string{styleDim.Render("↑↓: scroll history")}, hints...)
+	}
+
 	return "  " + strings.Join(hints, "  │  ")
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-// wordWrap splits text into lines of at most width runes.
 func wordWrap(text string, width int) []string {
 	if width <= 0 {
 		return []string{text}
@@ -513,7 +641,6 @@ func wordWrap(text string, width int) []string {
 	if len(words) == 0 {
 		return []string{""}
 	}
-
 	var lines []string
 	line := words[0]
 	for _, w := range words[1:] {
@@ -525,4 +652,25 @@ func wordWrap(text string, width int) []string {
 		}
 	}
 	return append(lines, line)
+}
+
+func truncate(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max-1]) + "…"
+}
+
+func clamp(v, lo, hi int) int {
+	if hi < lo {
+		return lo
+	}
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
