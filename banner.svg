@@ -1,0 +1,114 @@
+<svg width="1280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="680" height="280" rx="12" fill="#f8f7f4"/>
+
+<g transform="translate(36, 44)">
+
+  <!-- ── Chat panel (left) ───────────────────────────────── -->
+  <rect x="0" y="0" width="88" height="170" rx="5"
+        fill="none" stroke="#c8c6c0" stroke-width="1.2"/>
+  <!-- Titlebar line -->
+  <line x1="0" y1="16" x2="88" y2="16" stroke="#c8c6c0" stroke-width="0.8"/>
+  <!-- Three dots -->
+  <circle cx="10" cy="8" r="2.5" fill="#d8d6d0"/>
+  <circle cx="19" cy="8" r="2.5" fill="#d8d6d0"/>
+  <circle cx="28" cy="8" r="2.5" fill="#d8d6d0"/>
+
+  <!-- Chat messages — alternating left / right -->
+  <!-- user message 1 (left) -->
+  <rect x="7" y="24" width="52" height="9" rx="4" fill="#888780" opacity="0.35"/>
+  <!-- assistant reply 1 (right) -->
+  <rect x="29" y="40" width="52" height="9" rx="4" fill="#378ADD" opacity="0.30"/>
+  <!-- user message 2 (left) -->
+  <rect x="7" y="56" width="44" height="9" rx="4" fill="#888780" opacity="0.35"/>
+  <!-- assistant reply 2 (right) -->
+  <rect x="29" y="72" width="52" height="9" rx="4" fill="#378ADD" opacity="0.30"/>
+  <!-- user message 3 (left) — the generative request -->
+  <rect x="7" y="88" width="60" height="9" rx="4" fill="#378ADD" opacity="0.55"/>
+  <!-- typing indicator below -->
+  <circle cx="13" cy="110" r="3" fill="#888780" opacity="0.4"/>
+  <circle cx="22" cy="110" r="3" fill="#888780" opacity="0.4"/>
+  <circle cx="31" cy="110" r="3" fill="#888780" opacity="0.4"/>
+
+</g>
+
+<!-- ── Contract gate (centre) — vertical policy bar ────────── -->
+<g transform="translate(140, 44)">
+  <!-- Gate frame — like the heddle frame -->
+  <rect x="0" y="0" width="18" height="170" rx="3"
+        fill="none" stroke="#378ADD" stroke-width="1.8" opacity="0.65"/>
+  <!-- Lock icon at centre -->
+  <rect x="4" y="77" width="10" height="8" rx="2"
+        fill="none" stroke="#378ADD" stroke-width="1.2"/>
+  <path d="M6 77V74a3 3 0 0 1 6 0v3"
+        fill="none" stroke="#378ADD" stroke-width="1.2"/>
+
+  <!-- Arrows flowing left → right through gate -->
+  <line x1="-34" y1="30"  x2="-4"  y2="30"  stroke="#888780" stroke-width="1.2" opacity="0.5"/>
+  <line x1="-34" y1="56"  x2="-4"  y2="56"  stroke="#888780" stroke-width="1.2" opacity="0.5"/>
+  <line x1="-34" y1="88"  x2="-4"  y2="88"  stroke="#378ADD" stroke-width="1.4" opacity="0.7"/>
+  <line x1="-34" y1="120" x2="-4"  y2="120" stroke="#888780" stroke-width="1.2" opacity="0.5"/>
+
+  <!-- Lines emerging right — some become workspace content (green), chat replies (grey) -->
+  <line x1="22" y1="30"  x2="52" y2="30"  stroke="#888780" stroke-width="1.2" opacity="0.4"/>
+  <line x1="22" y1="56"  x2="52" y2="56"  stroke="#888780" stroke-width="1.2" opacity="0.4"/>
+  <line x1="22" y1="88"  x2="52" y2="20"  stroke="#1D9E75" stroke-width="1.5" opacity="0.8"/>
+  <line x1="22" y1="88"  x2="52" y2="56"  stroke="#1D9E75" stroke-width="1.2" opacity="0.5"/>
+  <line x1="22" y1="120" x2="52" y2="120" stroke="#888780" stroke-width="1.2" opacity="0.4"/>
+</g>
+
+<!-- ── Workspace panel (right) ─────────────────────────────── -->
+<g transform="translate(198, 44)">
+  <rect x="0" y="0" width="88" height="170" rx="5"
+        fill="none" stroke="#1D9E75" stroke-width="1.2" opacity="0.7"/>
+  <!-- Titlebar -->
+  <line x1="0" y1="16" x2="88" y2="16" stroke="#1D9E75" stroke-width="0.8" opacity="0.6"/>
+  <!-- Tab dots -->
+  <circle cx="10" cy="8" r="2.5" fill="#d8d6d0"/>
+  <circle cx="19" cy="8" r="2.5" fill="#d8d6d0"/>
+  <circle cx="28" cy="8" r="2.5" fill="#d8d6d0"/>
+  <!-- Tab label -->
+  <rect x="36" y="4" width="32" height="8" rx="2" fill="#1D9E75" opacity="0.2"/>
+
+  <!-- Document content lines being generated -->
+  <!-- Title line — prominent -->
+  <rect x="7" y="23" width="74" height="7" rx="2" fill="#1D9E75" opacity="0.45"/>
+  <!-- Body lines -->
+  <rect x="7" y="36" width="68" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <rect x="7" y="46" width="72" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <rect x="7" y="56" width="55" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <!-- Section heading -->
+  <rect x="7" y="70" width="50" height="6" rx="2" fill="#1D9E75" opacity="0.30"/>
+  <!-- More body -->
+  <rect x="7" y="82" width="70" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <rect x="7" y="92" width="62" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <rect x="7" y="102" width="74" height="5" rx="2" fill="#888780" opacity="0.3"/>
+  <!-- Cursor (text being written) -->
+  <rect x="7" y="114" width="28" height="5" rx="2" fill="#888780" opacity="0.2"/>
+  <rect x="37" y="114" width="2" height="5" rx="1" fill="#1D9E75" opacity="0.7"/>
+</g>
+
+<!-- ── Typography (right of illustration) ──────────────────── -->
+<text x="322" y="108"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="42" font-weight="500" fill="#2c2c2a" letter-spacing="-1">cas</text>
+
+<text x="322" y="143"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="15" font-weight="400" fill="#5f5e5a">conversational agent shell</text>
+
+<text x="322" y="180"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="12" font-weight="400" fill="#888780">conversation generates workspaces</text>
+<text x="322" y="196"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="12" font-weight="400" fill="#888780">you control them directly</text>
+<text x="322" y="214"
+      font-family="system-ui, -apple-system, sans-serif"
+      font-size="11" font-weight="400" fill="#aaa89e">deterministic contracts · streaming · persistent sessions</text>
+
+<rect x="322" y="222" width="56" height="22" rx="4" fill="#f1efe8" stroke="#d3d1c7" stroke-width="0.5"/>
+<text x="350" y="237"
+      font-family="monospace" font-size="10" font-weight="400"
+      fill="#888780" text-anchor="middle">goweft</text>
+
+</svg>

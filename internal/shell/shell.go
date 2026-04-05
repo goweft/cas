@@ -1,5 +1,6 @@
 // Package shell is the CAS session manager.
-// It wires intent detection, workspace lifecycle, LLM calls, and persistence.
+// It wires intent detection, workspace lifecycle, LLM calls, persistence,
+// and behavioral learning (Conductor).
 package shell
 
 import (
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goweft/cas/internal/conductor"
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/store"
@@ -34,44 +36,47 @@ type Session struct {
 
 func (s *Session) addMessage(role, text string) Message {
 	msg := Message{
-		ID:        newID(),
-		SessionID: s.ID,
-		Role:      role,
-		Text:      text,
-		Timestamp: time.Now().UTC(),
+		ID: newID(), SessionID: s.ID,
+		Role: role, Text: text, Timestamp: time.Now().UTC(),
 	}
 	s.History = append(s.History, msg)
 	return msg
 }
 
-// Response is returned from Shell.ProcessMessage.
+// Response is returned from ProcessMessage.
 type Response struct {
 	ChatReply string
-	Workspace *workspace.Workspace // non-nil when a workspace was created or updated
+	Workspace *workspace.Workspace
 	Intent    intent.Kind
 }
 
-// StreamResponse is returned from Shell.StreamMessage.
+// StreamResponse is returned from StreamMessage.
 type StreamResponse struct {
 	ChatReply string
 	Workspace *workspace.Workspace
 	Intent    intent.Kind
 }
 
-// Shell is the central CAS coordinator. Wire it with NewShell.
+// Shell is the central CAS coordinator.
 type Shell struct {
 	store      store.Store
 	workspaces *workspace.Manager
 	sessions   map[string]*Session
+	conductor  *conductor.Conductor
 }
 
 // NewShell creates a Shell backed by the given store.
-// Call Restore() after creation to reload persisted state.
-func NewShell(s store.Store) *Shell {
+// conductorPath is the profile JSON path; pass "" for the default ~/.cas/profile.json.
+func NewShell(s store.Store, conductorPath ...string) *Shell {
+	path := ""
+	if len(conductorPath) > 0 {
+		path = conductorPath[0]
+	}
 	return &Shell{
 		store:      s,
 		workspaces: workspace.NewManager(s),
 		sessions:   make(map[string]*Session),
+		conductor:  conductor.New(path),
 	}
 }
 
@@ -101,13 +106,11 @@ func (sh *Shell) Restore() error {
 	return nil
 }
 
-// CreateSession starts a new conversation session.
+// CreateSession starts a new conversation session and records it with the conductor.
 func (sh *Shell) CreateSession() (*Session, error) {
-	sess := &Session{
-		ID:        newID(),
-		CreatedAt: time.Now().UTC(),
-	}
+	sess := &Session{ID: newID(), CreatedAt: time.Now().UTC()}
 	sh.sessions[sess.ID] = sess
+	sh.conductor.ObserveSessionStart()
 	return sess, sh.store.SaveSession(sess.ID, sess.CreatedAt)
 }
 
@@ -134,8 +137,15 @@ func (sh *Shell) LatestSession() *Session {
 // Workspaces returns the workspace manager.
 func (sh *Shell) Workspaces() *workspace.Manager { return sh.workspaces }
 
-// ProcessMessage classifies the message, calls the LLM synchronously,
-// and returns a Response. For streaming, use StreamMessage.
+// ProfileSummary returns the conductor's behavioral profile for display.
+func (sh *Shell) ProfileSummary() map[string]interface{} {
+	return sh.conductor.ProfileSummary()
+}
+
+// UserContext returns the conductor's current context string.
+func (sh *Shell) UserContext() string { return sh.conductor.UserContext() }
+
+// ProcessMessage classifies the message, calls the LLM, and returns a Response.
 func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) (*Response, error) {
 	sess, err := sh.GetSession(sessionID)
 	if err != nil {
@@ -167,11 +177,18 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 	if err := sh.store.SaveMessage(toStoreMsg(shellMsg)); err != nil {
 		return nil, err
 	}
+
+	wsTitle, wsType := "", ""
+	if resp.Workspace != nil {
+		wsTitle, wsType = resp.Workspace.Title, resp.Workspace.Type
+	}
+	sh.conductor.Observe(string(in.Kind), message, wsTitle, wsType)
+
 	return resp, nil
 }
 
-// StreamMessage classifies the message, then streams tokens via onToken.
-// Returns a StreamResponse with the complete reply when generation finishes.
+// StreamMessage classifies the message, streams tokens via onToken,
+// and returns a StreamResponse when generation finishes.
 func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, onToken func(string)) (*StreamResponse, error) {
 	sess, err := sh.GetSession(sessionID)
 	if err != nil {
@@ -196,7 +213,6 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 			return nil, e
 		}
 		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
-		err = nil
 	default:
 		resp, err = sh.streamChat(ctx, sess, message, onToken)
 	}
@@ -208,17 +224,21 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 	if err := sh.store.SaveMessage(toStoreMsg(shellMsg)); err != nil {
 		return nil, err
 	}
+
+	wsTitle, wsType := "", ""
+	if resp.Workspace != nil {
+		wsTitle, wsType = resp.Workspace.Title, resp.Workspace.Type
+	}
+	sh.conductor.Observe(string(in.Kind), message, wsTitle, wsType)
+
 	return resp, nil
 }
 
 // ── Handlers ──────────────────────────────────────────────────────
 
 func (sh *Shell) handleCreate(ctx context.Context, sess *Session, in intent.Intent, message string) (*Response, error) {
-	title := in.TitleHint
-	if title == "" {
-		title = "Untitled"
-	}
-	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), "")
+	title := titleOrDefault(in.TitleHint)
+	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), sh.conductor.UserContext())
 	msgs := llm.BuildWorkspaceMessages(sys, title, message)
 	content, err := llm.Complete(ctx, msgs, llm.ModelFor(string(in.WSType)), 0.6)
 	if err != nil {
@@ -234,11 +254,8 @@ func (sh *Shell) handleCreate(ctx context.Context, sess *Session, in intent.Inte
 }
 
 func (sh *Shell) streamCreate(ctx context.Context, sess *Session, in intent.Intent, message string, onToken func(string)) (*StreamResponse, error) {
-	title := in.TitleHint
-	if title == "" {
-		title = "Untitled"
-	}
-	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), "")
+	title := titleOrDefault(in.TitleHint)
+	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), sh.conductor.UserContext())
 	msgs := llm.BuildWorkspaceMessages(sys, title, message)
 	content, err := llm.Stream(ctx, msgs, llm.ModelFor(string(in.WSType)), 0.6, onToken)
 	if err != nil {
@@ -259,7 +276,7 @@ func (sh *Shell) handleEdit(ctx context.Context, sess *Session, message string) 
 		return &Response{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
 	ws := active[len(active)-1]
-	sys := llm.SystemFor(llm.EditSystem, ws.Type, "")
+	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
 	msgs := llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
 	content, err := llm.Complete(ctx, msgs, llm.ModelFor(ws.Type), 0.3)
 	if err != nil {
@@ -279,7 +296,7 @@ func (sh *Shell) streamEdit(ctx context.Context, sess *Session, message string, 
 		return &StreamResponse{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
 	ws := active[len(active)-1]
-	sys := llm.SystemFor(llm.EditSystem, ws.Type, "")
+	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
 	msgs := llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
 	content, err := llm.Stream(ctx, msgs, llm.ModelFor(ws.Type), 0.3, onToken)
 	if err != nil {
@@ -307,8 +324,7 @@ func (sh *Shell) handleClose(sess *Session) (*Response, error) {
 }
 
 func (sh *Shell) handleChat(ctx context.Context, sess *Session, message string) (*Response, error) {
-	history := sessionHistory(sess)
-	msgs := llm.BuildChatMessages(llm.ChatSystem, history, message)
+	msgs := llm.BuildChatMessages(llm.ChatSystem+contextSuffix(sh.conductor.UserContext()), sessionHistory(sess), message)
 	reply, err := llm.Complete(ctx, msgs, llm.ModelFor("chat"), 0.7)
 	if err != nil {
 		return nil, err
@@ -320,8 +336,7 @@ func (sh *Shell) handleChat(ctx context.Context, sess *Session, message string) 
 }
 
 func (sh *Shell) streamChat(ctx context.Context, sess *Session, message string, onToken func(string)) (*StreamResponse, error) {
-	history := sessionHistory(sess)
-	msgs := llm.BuildChatMessages(llm.ChatSystem, history, message)
+	msgs := llm.BuildChatMessages(llm.ChatSystem+contextSuffix(sh.conductor.UserContext()), sessionHistory(sess), message)
 	reply, err := llm.Stream(ctx, msgs, llm.ModelFor("chat"), 0.7, onToken)
 	if err != nil {
 		return nil, err
@@ -368,4 +383,18 @@ func normaliseContent(content, wsType, title string) string {
 		return "# " + title + "\n\n" + content
 	}
 	return content
+}
+
+func titleOrDefault(hint string) string {
+	if hint == "" {
+		return "Untitled"
+	}
+	return hint
+}
+
+func contextSuffix(ctx string) string {
+	if ctx == "" {
+		return ""
+	}
+	return "\n\nUser context: " + ctx
 }
