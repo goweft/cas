@@ -115,7 +115,7 @@ type Model struct {
 
 	// Streaming
 	streaming bool
-	streamBuf strings.Builder
+	streamBuf string  // plain string — Builder must not be copied (Model is a value type)
 	streamCh  chan streamEvent
 
 	// Layout
@@ -169,9 +169,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tokenMsg:
-		m.streamBuf.WriteString(string(msg))
+		m.streamBuf += string(msg)
 		if m.activeTab < len(m.tabs) {
-			m.tabs[m.activeTab].content = m.streamBuf.String()
+			m.tabs[m.activeTab].content = m.streamBuf
 		}
 		return m, listenStream(m.streamCh)
 
@@ -417,7 +417,7 @@ func (m Model) submitMessage() (Model, tea.Cmd) {
 	m.input = ""
 	m.messages = append(m.messages, shell.Message{Role: "user", Text: message})
 	m.streaming = true
-	m.streamBuf.Reset()
+	m.streamBuf = ""
 	m.status = "thinking…"
 
 	if in.Kind == intent.KindCreate {
@@ -511,7 +511,7 @@ func (m Model) handleResponse(msg responseMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	m.streamBuf.Reset()
+	m.streamBuf = ""
 	return m, nil
 }
 
