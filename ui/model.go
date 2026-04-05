@@ -168,9 +168,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleKey(msg)
 
-	case tea.MouseMsg:
-		return m.handleMouse(msg), nil
-
 	case tokenMsg:
 		m.streamBuf.WriteString(string(msg))
 		if m.activeTab < len(m.tabs) {
@@ -193,36 +190,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleKey handles keys in chat and workspace view modes.
-// handleMouse maps scroll wheel events to pane scrolling.
-// Scroll direction is determined by the mouse button type reported by Bubble Tea.
-func (m Model) handleMouse(msg tea.MouseMsg) Model {
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		switch m.focus {
-		case FocusWorkspace:
-			if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].scroll > 0 {
-				m.tabs[m.activeTab].scroll--
-			}
-		case FocusChat:
-			if m.chatScroll < len(m.messages) {
-				m.chatScroll++
-			}
-		}
-	case tea.MouseButtonWheelDown:
-		switch m.focus {
-		case FocusWorkspace:
-			if m.activeTab < len(m.tabs) {
-				m.tabs[m.activeTab].scroll++
-			}
-		case FocusChat:
-			if m.chatScroll > 0 {
-				m.chatScroll--
-			}
-		}
-	}
-	return m
-}
-
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 
