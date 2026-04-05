@@ -102,7 +102,8 @@ type Model struct {
 
 	// Chat
 	messages   []shell.Message
-	input      string
+	input       string
+	inputCursor int    // rune offset of cursor in input
 	chatScroll int
 
 	// Workspace tabs
@@ -223,14 +224,71 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeySpace:
 		if m.focus == FocusChat && !m.streaming {
-			m.input += " "
+			m.input, m.inputCursor = insertAt(m.input, m.inputCursor, " ")
 		}
 		return m, nil
 
 	case tea.KeyBackspace:
-		if m.focus == FocusChat && len(m.input) > 0 {
+		if m.focus == FocusChat && m.inputCursor > 0 {
+			m.input, m.inputCursor = deleteAt(m.input, m.inputCursor-1)
+		}
+		return m, nil
+
+	case tea.KeyDelete:
+		if m.focus == FocusChat {
 			runes := []rune(m.input)
-			m.input = string(runes[:len(runes)-1])
+			if m.inputCursor < len(runes) {
+				m.input = string(runes[:m.inputCursor]) + string(runes[m.inputCursor+1:])
+			}
+		}
+		return m, nil
+
+	case tea.KeyLeft:
+		if m.focus == FocusChat && m.inputCursor > 0 {
+			m.inputCursor--
+		}
+		return m, nil
+
+	case tea.KeyRight:
+		if m.focus == FocusChat {
+			runes := []rune(m.input)
+			if m.inputCursor < len(runes) {
+				m.inputCursor++
+			}
+		}
+		return m, nil
+
+	case tea.KeyHome, tea.KeyCtrlA:
+		if m.focus == FocusChat {
+			m.inputCursor = 0
+		}
+		return m, nil
+
+	case tea.KeyEnd, tea.KeyCtrlE:
+		if m.focus == FocusChat {
+			m.inputCursor = len([]rune(m.input))
+		}
+		return m, nil
+
+	case tea.KeyCtrlK:
+		// Delete from cursor to end of line
+		if m.focus == FocusChat {
+			m.input = string([]rune(m.input)[:m.inputCursor])
+		}
+		return m, nil
+
+	case tea.KeyCtrlU:
+		// Delete from start of line to cursor
+		if m.focus == FocusChat {
+			m.input = string([]rune(m.input)[m.inputCursor:])
+			m.inputCursor = 0
+		}
+		return m, nil
+
+	case tea.KeyCtrlW:
+		// Delete previous word
+		if m.focus == FocusChat && m.inputCursor > 0 {
+			m.input, m.inputCursor = deleteWord(m.input, m.inputCursor)
 		}
 		return m, nil
 
@@ -315,7 +373,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if m.focus == FocusChat && !m.streaming {
-			m.input += string(msg.Runes)
+			m.input, m.inputCursor = insertAt(m.input, m.inputCursor, string(msg.Runes))
 		}
 		return m, nil
 	}
@@ -436,6 +494,7 @@ func (m Model) submitMessage() (Model, tea.Cmd) {
 	in := intent.Detect(message)
 
 	m.input = ""
+	m.inputCursor = 0
 	m.messages = append(m.messages, shell.Message{Role: "user", Text: message})
 	m.streaming = true
 	m.streamBuf = ""
@@ -610,12 +669,21 @@ func (m Model) renderChat(w, h int) string {
 		visible = append([]string{""}, visible...)
 	}
 
-	cursor := "█"
-	if m.streaming {
-		cursor = styleDim.Render("…")
-	}
 	sep := styleDim.Render(strings.Repeat("─", w-4))
-	inputLine := styleInput.Render("> " + m.input + cursor)
+	var inputLine string
+	if m.streaming {
+		inputLine = styleInput.Render("> " + m.input) + styleDim.Render("…")
+	} else {
+		// Render cursor at correct position within the input
+		runes := []rune(m.input)
+		cur := m.inputCursor
+		if cur > len(runes) {
+			cur = len(runes)
+		}
+		before := string(runes[:cur])
+		after := string(runes[cur:])
+		inputLine = styleInput.Render("> "+before) + styleInput.Render("█") + styleInput.Render(after)
+	}
 	return st.Render(strings.Join(visible, "\n") + "\n" + sep + "\n" + inputLine)
 }
 
@@ -775,6 +843,54 @@ func (m Model) renderStatus() string {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
+
+
+// insertAt inserts s into input at the given rune position, returns new string and cursor.
+func insertAt(input string, cursor int, s string) (string, int) {
+	runes := []rune(input)
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	inserted := []rune(s)
+	result := make([]rune, 0, len(runes)+len(inserted))
+	result = append(result, runes[:cursor]...)
+	result = append(result, inserted...)
+	result = append(result, runes[cursor:]...)
+	return string(result), cursor + len(inserted)
+}
+
+// deleteAt deletes the rune at position pos, returns new string and cursor.
+func deleteAt(input string, pos int) (string, int) {
+	runes := []rune(input)
+	if pos < 0 || pos >= len(runes) {
+		return input, pos + 1
+	}
+	result := make([]rune, 0, len(runes)-1)
+	result = append(result, runes[:pos]...)
+	result = append(result, runes[pos+1:]...)
+	return string(result), pos
+}
+
+// deleteWord deletes the word before the cursor (Ctrl+W behaviour).
+func deleteWord(input string, cursor int) (string, int) {
+	runes := []rune(input)
+	if cursor <= 0 {
+		return input, 0
+	}
+	// Skip trailing spaces
+	i := cursor
+	for i > 0 && runes[i-1] == ' ' {
+		i--
+	}
+	// Delete word characters
+	for i > 0 && runes[i-1] != ' ' {
+		i--
+	}
+	result := make([]rune, 0, len(runes)-(cursor-i))
+	result = append(result, runes[:i]...)
+	result = append(result, runes[cursor:]...)
+	return string(result), i
+}
 
 func wordWrap(text string, width int) []string {
 	if width <= 0 {
