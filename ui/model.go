@@ -275,6 +275,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.KeyCtrlZ:
+		// Undo last change to the active workspace (view mode only).
+		// Edit mode has its own undo via the textarea.
+		if m.focus == FocusWorkspace && !m.streaming &&
+			m.activeTab < len(m.tabs) && m.tabs[m.activeTab].ws != nil {
+			ws, err := m.sh.Workspaces().Undo(m.tabs[m.activeTab].ws.ID)
+			if err != nil {
+				m.status = "nothing to undo"
+			} else {
+				m.tabs[m.activeTab].ws = ws
+				m.tabs[m.activeTab].content = ws.Content
+				m.tabs[m.activeTab].title = ws.Title
+				m.tabs[m.activeTab].scroll = 0
+				m.status = "undone"
+			}
+		}
+		return m, nil
+
 	case tea.KeyRunes:
 		if m.focus == FocusWorkspace {
 			switch string(msg.Runes) {
@@ -739,8 +757,9 @@ func (m Model) renderStatus() string {
 		}, "  │  ")
 	case FocusWorkspace:
 		return "  " + strings.Join([]string{
-			styleDim.Render("[/]: prev/next tab"),
+			styleDim.Render("[/]: tabs"),
 			styleDim.Render("e: edit"),
+			styleDim.Render("ctrl+z: undo"),
 			styleDim.Render("↑↓/pgup/pgdn: scroll"),
 			styleDim.Render("tab: chat"),
 			styleDim.Render("ctrl+c: quit"),

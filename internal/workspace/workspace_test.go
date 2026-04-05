@@ -97,7 +97,6 @@ func TestRestoreWorkspaces(t *testing.T) {
 	m1 := workspace.NewManager(s)
 	m1.Create("ws1", "document", "Persisted", "# Hello", "ses1")
 
-	// New manager, same store — simulates restart
 	m2 := workspace.NewManager(s)
 	if err := m2.Restore(); err != nil {
 		t.Fatal(err)
@@ -108,5 +107,76 @@ func TestRestoreWorkspaces(t *testing.T) {
 	}
 	if ws.Title != "Persisted" {
 		t.Errorf("unexpected title: %s", ws.Title)
+	}
+}
+
+// ── Undo tests ────────────────────────────────────────────────────
+
+func TestUndoRestoresPreviousContent(t *testing.T) {
+	m := newManager()
+	m.Create("ws1", "document", "Doc", "# Version 1", "ses1")
+	m.Update("ws1", "Doc", "# Version 2")
+
+	ws, err := m.Undo("ws1")
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if ws.Content != "# Version 1" {
+		t.Errorf("expected '# Version 1' after undo, got %q", ws.Content)
+	}
+}
+
+func TestUndoMultipleTimes(t *testing.T) {
+	m := newManager()
+	m.Create("ws1", "document", "Doc", "v1", "ses1")
+	m.Update("ws1", "Doc", "v2")
+	m.Update("ws1", "Doc", "v3")
+
+	// Undo v3 → v2
+	ws, err := m.Undo("ws1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Content != "v2" {
+		t.Errorf("first undo: expected v2, got %q", ws.Content)
+	}
+
+	// Undo v2 → v1
+	ws, err = m.Undo("ws1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Content != "v1" {
+		t.Errorf("second undo: expected v1, got %q", ws.Content)
+	}
+}
+
+func TestUndoWithNoHistoryReturnsError(t *testing.T) {
+	m := newManager()
+	m.Create("ws1", "document", "Doc", "content", "ses1")
+	// No updates made — nothing to undo
+	_, err := m.Undo("ws1")
+	if err == nil {
+		t.Error("expected error when undoing with no history")
+	}
+}
+
+func TestUndoOnClosedWorkspaceReturnsError(t *testing.T) {
+	m := newManager()
+	m.Create("ws1", "document", "Doc", "# v1", "ses1")
+	m.Update("ws1", "Doc", "# v2")
+	m.Close("ws1")
+
+	_, err := m.Undo("ws1")
+	if err == nil {
+		t.Error("expected error when undoing a closed workspace")
+	}
+}
+
+func TestUndoOnNonexistentWorkspaceReturnsError(t *testing.T) {
+	m := newManager()
+	_, err := m.Undo("does-not-exist")
+	if err == nil {
+		t.Error("expected error for nonexistent workspace")
 	}
 }

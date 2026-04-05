@@ -33,6 +33,11 @@ type ErrClosed struct{ ID string }
 
 func (e *ErrClosed) Error() string { return fmt.Sprintf("workspace %q is closed", e.ID) }
 
+// ErrNoHistory is returned when there is no history to undo.
+type ErrNoHistory struct{ ID string }
+
+func (e *ErrNoHistory) Error() string { return fmt.Sprintf("no history to undo for workspace %q", e.ID) }
+
 // Manager holds all live workspace state and mediates store access.
 type Manager struct {
 	store      store.Store
@@ -135,6 +140,28 @@ func (m *Manager) Update(id, title, content string) (*Workspace, error) {
 	return ws, nil
 }
 
+// Undo restores the active workspace to its previous version.
+// Returns ErrNoHistory if there is nothing to undo, ErrNotFound if the
+// workspace does not exist, or ErrClosed if it is no longer active.
+func (m *Manager) Undo(id string) (*Workspace, error) {
+	ws, err := m.get(id)
+	if err != nil {
+		return nil, err
+	}
+	if !ws.IsActive() {
+		return nil, &ErrClosed{ID: id}
+	}
+
+	restored, err := m.store.Undo(id)
+	if err != nil {
+		return nil, &ErrNoHistory{ID: id}
+	}
+
+	ws.Title = restored.Title
+	ws.Content = restored.Content
+	return ws, nil
+}
+
 // Close marks a workspace as closed.
 func (m *Manager) Close(id string) (*Workspace, error) {
 	ws, err := m.get(id)
@@ -168,7 +195,6 @@ func (m *Manager) Active() []*Workspace {
 			out = append(out, ws)
 		}
 	}
-	// Sort by CreatedAt for stable ordering
 	for i := 1; i < len(out); i++ {
 		for j := i; j > 0 && out[j].CreatedAt.Before(out[j-1].CreatedAt); j-- {
 			out[j], out[j-1] = out[j-1], out[j]
