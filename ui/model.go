@@ -162,7 +162,7 @@ func (m Model) CurrentFocus() Focus { return m.focus }
 // Status returns the current status bar text (for testing).
 func (m Model) Status() string { return m.status }
 
-func (m Model) Init() tea.Cmd { return tea.WindowSize() }
+func (m Model) Init() tea.Cmd { return nil }
 
 // ── Update ────────────────────────────────────────────────────────
 
