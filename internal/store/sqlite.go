@@ -34,11 +34,10 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("sqlite: open: %w", err)
 	}
 
-	// WAL mode for concurrent reads + single writer
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		return nil, fmt.Errorf("sqlite: WAL: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
+	if _, err := db.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
 		return nil, fmt.Errorf("sqlite: fk: %w", err)
 	}
 
@@ -49,21 +48,22 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	return s, nil
 }
 
+// migrate applies schema creation and any pending version migrations.
+// Uses PRAGMA user_version to track which migrations have run.
 func (s *SQLiteStore) migrate() error {
-	_, err := s.db.Exec(`
+	// ── v0: base schema ──────────────────────────────────────────
+	if _, err := s.db.Exec(`
 	CREATE TABLE IF NOT EXISTS sessions (
 		id         TEXT PRIMARY KEY,
 		created_at TEXT NOT NULL
 	);
-
 	CREATE TABLE IF NOT EXISTS messages (
 		id         TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL REFERENCES sessions(id),
+		session_id TEXT NOT NULL,
 		role       TEXT NOT NULL,
 		text       TEXT NOT NULL,
 		timestamp  TEXT NOT NULL
 	);
-
 	CREATE TABLE IF NOT EXISTS workspaces (
 		id         TEXT PRIMARY KEY,
 		session_id TEXT NOT NULL,
@@ -73,17 +73,98 @@ func (s *SQLiteStore) migrate() error {
 		created_at TEXT NOT NULL,
 		closed_at  TEXT
 	);
-
 	CREATE TABLE IF NOT EXISTS workspace_history (
 		id           INTEGER PRIMARY KEY AUTOINCREMENT,
-		workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+		workspace_id TEXT NOT NULL,
 		version      INTEGER NOT NULL,
 		title        TEXT NOT NULL,
 		content      TEXT NOT NULL,
 		saved_at     TEXT NOT NULL
 	);
-	`)
-	return err
+	`); err != nil {
+		return err
+	}
+
+	// ── v1: fix messages.id from INTEGER to TEXT ──────────────────
+	// Existing databases created before this migration have
+	// messages.id as INTEGER PRIMARY KEY AUTOINCREMENT.
+	// Inserting hex string IDs into that column raises SQLITE_MISMATCH (20).
+	var schemaVersion int
+	s.db.QueryRow(`PRAGMA user_version`).Scan(&schemaVersion)
+
+	if schemaVersion < 1 {
+		if err := s.migrateMessagesIDToText(); err != nil {
+			return fmt.Errorf("migration v1: %w", err)
+		}
+		if _, err := s.db.Exec(`PRAGMA user_version = 1`); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// migrateMessagesIDToText recreates the messages table with id TEXT PRIMARY KEY.
+// Preserves all existing rows; old integer IDs are converted to strings.
+func (s *SQLiteStore) migrateMessagesIDToText() error {
+	// Check current column type — if already TEXT, nothing to do
+	var colType string
+	rows, err := s.db.Query(`PRAGMA table_info(messages)`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk)
+		if name == "id" {
+			colType = typ
+		}
+	}
+	rows.Close()
+
+	if colType == "TEXT" || colType == "" {
+		return nil // already correct or table doesn't exist
+	}
+
+	// Recreate with TEXT id
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE messages_new (
+			id         TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			role       TEXT NOT NULL,
+			text       TEXT NOT NULL,
+			timestamp  TEXT NOT NULL
+		)
+	`); err != nil {
+		return err
+	}
+
+	// Copy existing rows — cast integer IDs to text
+	if _, err := tx.Exec(`
+		INSERT INTO messages_new (id, session_id, role, text, timestamp)
+		SELECT CAST(id AS TEXT), session_id, role, text, timestamp FROM messages
+	`); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(`DROP TABLE messages`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE messages_new RENAME TO messages`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // ── Sessions ──────────────────────────────────────────────────────
@@ -168,7 +249,6 @@ func (s *SQLiteStore) UpdateWorkspace(id, title, content string) error {
 	}
 	defer tx.Rollback()
 
-	// Snapshot current state before overwriting
 	var curTitle, curContent string
 	err = tx.QueryRow(`SELECT title, content FROM workspaces WHERE id=?`, id).
 		Scan(&curTitle, &curContent)
@@ -279,7 +359,6 @@ func (s *SQLiteStore) Undo(workspaceID string) (*HistoryRow, error) {
 	}
 	defer tx.Rollback()
 
-	// Get latest snapshot
 	var r HistoryRow
 	var savedAt string
 	var rowID int64
@@ -295,11 +374,9 @@ func (s *SQLiteStore) Undo(workspaceID string) (*HistoryRow, error) {
 	}
 	r.SavedAt, _ = time.Parse(time.RFC3339Nano, savedAt)
 
-	// Restore workspace to snapshot
 	if _, err := tx.Exec(`UPDATE workspaces SET title=?, content=? WHERE id=?`, r.Title, r.Content, workspaceID); err != nil {
 		return nil, err
 	}
-	// Remove the used snapshot
 	if _, err := tx.Exec(`DELETE FROM workspace_history WHERE id=?`, rowID); err != nil {
 		return nil, err
 	}
