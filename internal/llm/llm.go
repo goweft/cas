@@ -115,6 +115,26 @@ type ollamaResponse struct {
 	Done bool `json:"done"`
 }
 
+// stripThink removes <think>...</think> chain-of-thought blocks emitted by
+// qwen3.x models before their actual response. Without stripping, the UI
+// blocks for 60-120s while the model reasons internally.
+func stripThink(s string) string {
+	for {
+		start := strings.Index(s, "<think>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(s, "</think>")
+		if end == -1 {
+			// unclosed think block — strip from start to end
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		s = s[:start] + s[end+len("</think>"):]
+	}
+	return strings.TrimSpace(s)
+}
+
 func ollamaComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
 	req := ollamaRequest{Model: model, Messages: messages, Stream: false}
 	req.Options.Temperature = temperature
@@ -142,7 +162,7 @@ func ollamaComplete(ctx context.Context, messages []Message, model string, tempe
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("ollama decode: %w", err)
 	}
-	return strings.TrimSpace(result.Message.Content), nil
+	return stripThink(result.Message.Content), nil
 }
 
 func ollamaStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
@@ -169,6 +189,7 @@ func ollamaStream(ctx context.Context, messages []Message, model string, tempera
 	defer resp.Body.Close()
 
 	var buf strings.Builder
+	var inThink bool
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -181,8 +202,18 @@ func ollamaStream(ctx context.Context, messages []Message, model string, tempera
 		}
 		token := chunk.Message.Content
 		if token != "" {
-			onToken(token)
-			buf.WriteString(token)
+			// Suppress <think>...</think> chain-of-thought tokens.
+			// qwen3.x models emit these before the actual response.
+			if strings.Contains(token, "<think>") {
+				inThink = true
+			}
+			if !inThink {
+				onToken(token)
+				buf.WriteString(token)
+			}
+			if strings.Contains(token, "</think>") {
+				inThink = false
+			}
 		}
 		if chunk.Done {
 			break
@@ -345,7 +376,7 @@ func anthropicStream(ctx context.Context, messages []Message, model string, temp
 	return buf.String(), scanner.Err()
 }
 
-// BuildMessages constructs the message slice for a given prompt type.
+// BuildWorkspaceMessages constructs the message slice for workspace generation.
 func BuildWorkspaceMessages(system, title, userMessage string) []Message {
 	return []Message{
 		{Role: "system", Content: system},
@@ -372,7 +403,6 @@ func BuildChatMessages(system string, history []Message, userMessage string) []M
 	msgs = append(msgs, history...)
 	msgs = append(msgs, Message{Role: "user", Content: userMessage})
 	return msgs
-
 }
 
 // ── System prompts ────────────────────────────────────────────────
