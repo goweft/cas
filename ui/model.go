@@ -146,6 +146,15 @@ func New(sh *shell.Shell, sessionID string, history []shell.Message, workspaces 
 	return m
 }
 
+// Input returns the current chat input string (for testing).
+func (m Model) Input() string { return m.input }
+
+// InputCursor returns the current cursor position in the input (for testing).
+func (m Model) InputCursor() int { return m.inputCursor }
+
+// CurrentFocus returns the current focus state (for testing).
+func (m Model) CurrentFocus() Focus { return m.focus }
+
 func (m Model) Init() tea.Cmd { return tea.WindowSize() }
 
 // ── Update ────────────────────────────────────────────────────────
