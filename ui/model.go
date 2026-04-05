@@ -29,11 +29,11 @@ import (
 // ── Palette ───────────────────────────────────────────────────────
 
 var (
-	colBorder    = lipgloss.AdaptiveColor{Light: "#C8C6C0", Dark: "#383838"}
-	colActive    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	colWorkspace = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	colEdit      = lipgloss.AdaptiveColor{Light: "#D18E00", Dark: "#FFA657"} // amber in edit mode
-	colDim       = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#5C5C5C"}
+	colBorder    = lipgloss.Color("#383838")
+	colActive    = lipgloss.Color("#7D56F4")
+	colWorkspace = lipgloss.Color("#73F59F")
+	colEdit      = lipgloss.Color("#FFA657") // amber in edit mode
+	colDim       = lipgloss.Color("#5C5C5C")
 
 	stylePanel       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colBorder).Padding(0, 1)
 	styleActivePanel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colActive).Padding(0, 1)
