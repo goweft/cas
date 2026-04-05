@@ -146,7 +146,7 @@ func New(sh *shell.Shell, sessionID string, history []shell.Message, workspaces 
 	return m
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return tea.WindowSize() }
 
 // ── Update ────────────────────────────────────────────────────────
 
@@ -600,7 +600,7 @@ func (m Model) handleResponse(msg responseMsg) (Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.width == 0 {
-		return "Loading…"
+		return "cas — starting…"
 	}
 
 	chatW := m.width * 40 / 100
