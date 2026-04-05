@@ -444,15 +444,31 @@ RULES:
 - If the user wants a workspace, tell them: write a [document type].`
 
 // SystemFor returns the system prompt for a given wsType, with optional user context appended.
+// For Ollama + qwen3.x models, prepends /no_think to disable chain-of-thought
+// generation entirely — eliminating the 60-120s silent thinking gap.
 func SystemFor(prompts map[string]string, wsType, userContext string) string {
 	base, ok := prompts[wsType]
 	if !ok {
 		base = prompts["document"]
 	}
 	if userContext != "" {
-		return base + "\n\nUser context: " + userContext
+		base = base + "\n\nUser context: " + userContext
+	}
+	if needsNoThink(wsType) {
+		return "/no_think\n" + base
 	}
 	return base
+}
+
+// needsNoThink returns true when the active provider+model combination
+// emits <think> blocks that should be suppressed via /no_think directive.
+// Currently targets Ollama + qwen3.x family.
+func needsNoThink(wsType string) bool {
+	if ActiveProvider() != ProviderOllama {
+		return false
+	}
+	model := strings.ToLower(ModelFor(wsType))
+	return strings.HasPrefix(model, "qwen3")
 }
 
 // ReadAll drains an io.Reader — useful in tests.

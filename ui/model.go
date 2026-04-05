@@ -359,6 +359,26 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.KeyCtrlN:
+		// Start a new session — clears chat history, all tabs, resets to empty state.
+		if !m.streaming {
+			newSess, err := m.sh.CreateSession()
+			if err != nil {
+				m.status = "new session failed: " + err.Error()
+			} else {
+				m.sessionID = newSess.ID
+				m.messages = nil
+				m.input = ""
+				m.inputCursor = 0
+				m.chatScroll = 0
+				m.tabs = nil
+				m.activeTab = 0
+				m.streamBuf = ""
+				m.status = "new session started"
+			}
+		}
+		return m, nil
+
 	case tea.KeyCtrlZ:
 		// Undo last change to the active workspace (view mode only).
 		// Edit mode has its own undo via the textarea.
@@ -861,6 +881,7 @@ func (m Model) renderStatus() string {
 			styleDim.Render("↑↓: scroll history"),
 			styleDim.Render("enter: send"),
 			styleDim.Render("tab: workspace"),
+			styleDim.Render("ctrl+n: new session"),
 			styleDim.Render("ctrl+c: quit"),
 		}, "  │  ")
 	}

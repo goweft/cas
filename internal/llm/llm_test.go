@@ -78,8 +78,9 @@ func TestSystemFor(t *testing.T) {
 	}
 
 	got := llm.SystemFor(prompts, "document", "")
-	if got != "doc system" {
-		t.Errorf("expected 'doc system', got %q", got)
+	// With Ollama+qwen3.x /no_think may be prepended; the base must be present
+	if !contains(got, "doc system") {
+		t.Errorf("expected 'doc system' in result, got %q", got)
 	}
 
 	got = llm.SystemFor(prompts, "code", "user prefers Python")
@@ -88,7 +89,7 @@ func TestSystemFor(t *testing.T) {
 	}
 
 	got = llm.SystemFor(prompts, "unknown", "")
-	if got != "doc system" {
+	if !contains(got, "doc system") {
 		t.Errorf("unknown type should fall back to document, got %q", got)
 	}
 }
