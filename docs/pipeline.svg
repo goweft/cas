@@ -1,0 +1,88 @@
+<svg width="100%" viewBox="0 0 680 460" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .th { font-size: 14px; font-weight: 500; }
+    .ts { font-size: 12px; }
+    .arr { stroke: #888780; stroke-width: 1.5; }
+    .c-gray rect { fill: #F1EFE8; stroke: #5F5E5A; stroke-width: 0.5; }
+    .c-gray .th { fill: #2C2C2A; } .c-gray .ts { fill: #5F5E5A; }
+    .c-purple rect { fill: #EEEDFE; stroke: #534AB7; stroke-width: 0.5; }
+    .c-purple .th { fill: #3C3489; } .c-purple .ts { fill: #534AB7; }
+    .c-teal rect { fill: #E1F5EE; stroke: #0F6E56; stroke-width: 0.5; }
+    .c-teal .th { fill: #085041; } .c-teal .ts { fill: #0F6E56; }
+    .c-blue rect { fill: #E6F1FB; stroke: #185FA5; stroke-width: 0.5; }
+    .c-blue .th { fill: #0C447C; } .c-blue .ts { fill: #185FA5; }
+    .c-amber rect { fill: #FAEEDA; stroke: #854F0B; stroke-width: 0.5; }
+    .c-amber .th { fill: #633806; } .c-amber .ts { fill: #854F0B; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <g class="c-gray">
+    <rect x="250" y="20" width="180" height="44" rx="8"/>
+    <text class="th" x="340" y="42" text-anchor="middle" dominant-baseline="central">User message</text>
+  </g>
+  <line x1="340" y1="64" x2="340" y2="90" class="arr" marker-end="url(#arrow)"/>
+  <g class="c-amber">
+    <rect x="230" y="92" width="220" height="44" rx="8"/>
+    <text class="th" x="340" y="106" text-anchor="middle" dominant-baseline="central">Plugin match?</text>
+    <text class="ts" x="340" y="124" text-anchor="middle" dominant-baseline="central">~/.cas/plugins/*.lua</text>
+  </g>
+  <text class="ts" x="478" y="112" fill="#854F0B" dominant-baseline="central">yes</text>
+  <line x1="450" y1="114" x2="510" y2="114" class="arr" marker-end="url(#arrow)"/>
+  <g class="c-amber">
+    <rect x="514" y="92" width="130" height="44" rx="8"/>
+    <text class="th" x="579" y="114" text-anchor="middle" dominant-baseline="central">Run Lua</text>
+  </g>
+  <text class="ts" x="354" y="152" fill="#5F5E5A" dominant-baseline="central">no</text>
+  <line x1="340" y1="136" x2="340" y2="168" class="arr" marker-end="url(#arrow)"/>
+  <g class="c-purple">
+    <rect x="220" y="170" width="240" height="56" rx="8"/>
+    <text class="th" x="340" y="190" text-anchor="middle" dominant-baseline="central">Intent detection</text>
+    <text class="ts" x="340" y="210" text-anchor="middle" dominant-baseline="central">Pure regex, sub-millisecond</text>
+  </g>
+  <line x1="240" y1="226" x2="80" y2="280" stroke="#888780" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <line x1="290" y1="226" x2="220" y2="280" stroke="#888780" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <line x1="340" y1="226" x2="340" y2="280" stroke="#888780" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <line x1="390" y1="226" x2="460" y2="280" stroke="#888780" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <line x1="440" y1="226" x2="600" y2="280" stroke="#888780" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <g class="c-teal">
+    <rect x="28" y="282" width="105" height="56" rx="8"/>
+    <text class="th" x="80" y="302" text-anchor="middle" dominant-baseline="central">Create</text>
+    <text class="ts" x="80" y="320" text-anchor="middle" dominant-baseline="central">LLM streams</text>
+  </g>
+  <g class="c-teal">
+    <rect x="168" y="282" width="105" height="56" rx="8"/>
+    <text class="th" x="220" y="302" text-anchor="middle" dominant-baseline="central">Edit</text>
+    <text class="ts" x="220" y="320" text-anchor="middle" dominant-baseline="central">Resolve target</text>
+  </g>
+  <g class="c-blue">
+    <rect x="298" y="282" width="85" height="56" rx="8"/>
+    <text class="th" x="340" y="302" text-anchor="middle" dominant-baseline="central">Run</text>
+    <text class="ts" x="340" y="320" text-anchor="middle" dominant-baseline="central">Subprocess</text>
+  </g>
+  <g class="c-teal">
+    <rect x="408" y="282" width="105" height="56" rx="8"/>
+    <text class="th" x="460" y="302" text-anchor="middle" dominant-baseline="central">Combine</text>
+    <text class="ts" x="460" y="320" text-anchor="middle" dominant-baseline="central">Multi-source</text>
+  </g>
+  <g class="c-gray">
+    <rect x="548" y="282" width="105" height="56" rx="8"/>
+    <text class="th" x="600" y="302" text-anchor="middle" dominant-baseline="central">Chat</text>
+    <text class="ts" x="600" y="320" text-anchor="middle" dominant-baseline="central">Conversation</text>
+  </g>
+  <line x1="40" y1="358" x2="640" y2="358" stroke="#B4B2A9" stroke-width="0.5" stroke-dasharray="4 3"/>
+  <text class="ts" x="340" y="374" text-anchor="middle" fill="#5F5E5A">Design by Contract enforcement — fail-closed</text>
+  <line x1="200" y1="386" x2="200" y2="410" class="arr" marker-end="url(#arrow)"/>
+  <line x1="480" y1="386" x2="480" y2="410" class="arr" marker-end="url(#arrow)"/>
+  <g class="c-teal">
+    <rect x="100" y="412" width="200" height="36" rx="8"/>
+    <text class="th" x="200" y="430" text-anchor="middle" dominant-baseline="central">Workspace panel</text>
+  </g>
+  <g class="c-gray">
+    <rect x="380" y="412" width="200" height="36" rx="8"/>
+    <text class="th" x="480" y="430" text-anchor="middle" dominant-baseline="central">Chat panel</text>
+  </g>
+</svg>
