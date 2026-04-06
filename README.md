@@ -4,74 +4,79 @@
 <p align="center"><strong>Conversational Agent Shell</strong></p>
 <p align="center">
   A terminal shell where conversation generates workspaces and you control them directly.<br>
-  Single static binary · deterministic contracts · streaming · persistent sessions
+  Single static binary &nbsp;·&nbsp; deterministic contracts &nbsp;·&nbsp; streaming &nbsp;·&nbsp; persistent sessions
 </p>
 
-[See It Work](#see-it-work) · [The Idea](#the-idea) · [How It Works](#how-it-works) · [Keyboard Reference](#keyboard-reference) · [Quick Start](#quick-start)
+<p align="center">
+  <a href="#the-idea">The Idea</a> &nbsp;·&nbsp;
+  <a href="#see-it-work">See It Work</a> &nbsp;·&nbsp;
+  <a href="#how-it-works">How It Works</a> &nbsp;·&nbsp;
+  <a href="#keyboard-reference">Keys</a> &nbsp;·&nbsp;
+  <a href="#quick-start">Quick Start</a>
+</p>
+
+---
+
+## The Idea
+
+Most AI tools give you a chat window. You type, the model responds, you copy what you need and paste it somewhere else. The conversation and the artifact are separate things in separate places.
+
+CAS is a different arrangement. Conversation is for **generating** things. Once generated, you **control** them directly.
+
+You say *write a project proposal*. A workspace tab opens alongside the chat — tokens streaming into it as the model generates. When generation ends, you edit it directly, ask CAS to make changes, or both. The AI built the artifact. You wield it.
+
+This resolves a debate in HCI running since 1997. Shneiderman argued that direct manipulation gives users control that delegation never can. Maes argued that agents reduce cognitive load that direct manipulation can't scale to. Both were right. CAS addresses it architecturally:
+
+**Agents generate. Users manipulate.**
 
 ---
 
 ## See It Work
 
 ```
-┌─ chat ──────────────────────┐ ┌─ [d] Project Proposal ──────────────────┐
-│                             │ │                                          │
-│ you › write a project       │ │ # Project Proposal                       │
-│       proposal for a local  │ │                                          │
-│       AI platform           │ │ ## Executive Summary                     │
-│                             │ │                                          │
-│ cas › Created document      │ │ This proposal outlines a self-hosted     │
-│       workspace "Project    │ │ AI platform built on local inference...  │
-│       Proposal". Edit       │ │                                          │
-│       directly or ask me    │ │ ## Architecture                          │
-│       to make changes.      │ │                                          │
-│                             │ │ The platform consists of three layers... │
-│ you › add a security        │ │                                          │
-│       section               │ │ ## Security                              │
-│                             │ │                                          │
-│ cas › Updated workspace     │ │ All tool calls pass through deterministic│
-│       "Project Proposal".   │ │ contracts before execution...            │
-│─────────────────────────────│ │                                          │
-│ > █                         │ │                                    ↕ 45% │
-└─────────────────────────────┘ └──────────────────────────────────────────┘
-  tab: workspace  enter: send  ctrl+c: quit
+┌─ chat ───────────────────────────┐ ┌─ [l] Todo List For Ea ─────────────────────────┐
+│                                  │ │                                                 │
+│ you › make a todo list for       │ │  Easter Todo List                               │
+│       easter                     │ │                                                 │
+│                                  │ │  ## 🗓 Planning & Budget                        │
+│ cas › Created list workspace     │ │                                                 │
+│       "Todo List For Easter".    │ │  [ ] Set date and time for Easter Sunday        │
+│       Edit directly or ask me    │ │  [ ] Confirm guest list and RSVPs               │
+│       to make changes.           │ │  [ ] Create budget for food and decorations     │
+│                                  │ │  [ ] Check availability of family members       │
+│ you › add a shopping section     │ │  [ ] Book any necessary reservations            │
+│                                  │ │                                                 │
+│ cas › Updated workspace          │ │  ## 🛒 Shopping List                            │
+│       "Todo List For Easter".    │ │                                                 │
+│                                  │ │  [ ] Ham or lamb (serves 8)                     │
+│ ────────────────────────────── │ │  [ ] Eggs for dying                             │
+│ > █                              │ │                                          ↕ 0%   │
+└──────────────────────────────────┘ └─────────────────────────────────────────────────┘
+  ↑↓: scroll history  │  enter: send  │  tab: workspace  │  ctrl+n: new session  │  ctrl+c: quit
 ```
 
-Tokens stream into the workspace as they are generated. The left panel is persistent conversation — the right panel is the workspace you control directly.
-
----
-
-## The Idea
-
-Most AI tools collapse into one of two failure modes.
-
-In the first, the AI acts as an **overlay** — a chat window bolted onto existing applications. The underlying friction remains.
-
-In the second, the AI acts as an **agent** — it operates your tools on your behalf. The user is now a passenger.
-
-CAS is a different arrangement. Conversation is for **generating** things. Once generated, you **control** them directly.
-
-You say: *write a project proposal*. A workspace tab opens alongside the chat — tokens streaming into it as the model generates. When generation ends, you can type in it, ask CAS to make changes, or both. The AI built the tool. You wield it.
-
-This resolves a debate in HCI running since 1997. Ben Shneiderman argued that direct manipulation gives users a sense of control that delegation never can. Pattie Maes argued that interface agents reduce cognitive load and handle complexity. They were both right. CAS addresses it architecturally: **agents generate, users manipulate.**
+Tokens stream into the workspace as they are generated. The left panel is persistent conversation. The right panel is the workspace you control directly. Multiple workspaces open as tabs — `[d]` document, `[c]` code, `[l]` list.
 
 ---
 
 ## How It Works
 
-### Intent detection
+### Intent detection — zero latency, no LLM call
 
-Every message is classified before any model call — no LLM, no latency:
+Every message is classified before any model is invoked:
 
 ```
-"write a project proposal"   → create workspace (document)
-"create a python script"     → create workspace (code)
-"add a section about budget" → edit active workspace
-"edit it directly"           → chat (self-edit exclusion → not an LLM edit)
-"hello"                      → chat
+"write a project proposal"       → create workspace (document)
+"make a todo list for easter"    → create workspace (list)
+"create a python script"         → create workspace (code)
+"add a shopping section"         → edit active workspace
+"add error handling"             → edit active workspace
+"how long should this be?"       → chat reply
+"edit it directly"               → chat  ← self-edit exclusion fires first
+"close the workspace"            → close active tab
 ```
 
-Self-edit phrases are checked first, before edit patterns — this prevents "edit it directly" from being misclassified and triggering an unwanted LLM call.
+Pure regex, sub-millisecond. Self-edit phrases are checked before edit patterns so "edit it directly" never triggers an unwanted LLM call.
 
 ### Deterministic contracts
 
@@ -83,80 +88,104 @@ contract.CheckInvariants()      // are all invariants satisfied?
 contract.CheckPostconditions()  // did the output meet requirements?
 ```
 
-Contracts are enforced by deterministic Go code external to the model. The model cannot modify, bypass, or reason about them. Any violation is fatal to the operation — fail-closed always.
+Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1986).
 
-Based on Bertrand Meyer's Design by Contract (1986).
+### Three workspace types
 
-### Multi-provider model routing
+| Type | Badge | Model (Ollama) | Model (Anthropic) |
+|---|---|---|---|
+| Document | `[d]` | `qwen3.5:9b` | `claude-sonnet-4-6` |
+| List | `[l]` | `qwen3.5:9b` | `claude-sonnet-4-6` |
+| Code | `[c]` | `qwen2.5-coder:7b` | `claude-haiku-4-5-20251001` |
 
-Select inference backend via `CAS_PROVIDER`:
+### Streaming
 
-**Ollama (default)** — local, private:
-- Documents / lists / chat → `qwen3.5:9b`
-- Code → `qwen2.5-coder:7b`
-
-**Anthropic API** — cloud, no GPU:
-- Documents / lists / chat → `claude-sonnet-4-6`
-- Code → `claude-haiku-4-5-20251001`
-
-Override any model: `CAS_MODEL_CODE=qwen3.5:27b ./cas`
+A placeholder tab appears immediately on create. Tokens stream into it via a buffered channel feeding one event per Bubble Tea tick. The workspace is live from the first token. No separate loading state.
 
 ### Behavioral learning
 
-A Conductor module observes your usage patterns across sessions:
+A Conductor module observes your usage across sessions and builds `~/.cas/profile.json`:
 
-- Which workspace types you create most
-- What topics appear in your documents  
-- Whether you tend to rewrite or add sections
+```json
+{
+  "ws_types": {"document": 12, "list": 5, "code": 3},
+  "doc_types": {"proposal": 4, "report": 3, "note": 2},
+  "edit_verbs": {"add": 7, "fix": 2},
+  "session_count": 6,
+  "workspace_count": 20
+}
+```
 
-This builds a profile at `~/.cas/profile.json` that feeds back into LLM system prompts, progressively adapting the tool to how you work. More sessions → better context → better output.
+This feeds back into LLM system prompts automatically. More sessions → better context → better output. No configuration required.
 
 ### Persistence
 
-Sessions, workspaces, and conversation history persist across restarts via SQLite (WAL mode) at `~/.cas/cas.db`. Workspaces restore as tabs on next launch.
+SQLite (WAL mode) at `~/.cas/cas.db`. Sessions, workspaces, and conversation history survive restarts. Previous workspaces restore as tabs on next launch. Full version history per workspace enables multi-step undo.
 
 ---
 
 ## Keyboard Reference
 
+### Chat panel (default focus)
+
 | Key | Action |
 |---|---|
-| `Enter` | Send message (chat focused) |
-| `Tab` | Switch focus between chat and workspace panels |
-| `Esc` | Return to chat focus from workspace / save + exit edit mode |
-| `[` / `]` | Previous / next workspace tab (workspace focused) |
-| `e` | Enter inline edit mode for the active tab |
-| `↑` / `↓` | Scroll content (workspace focused) or scroll history (chat focused) |
-| `PgUp` / `PgDn` | Scroll workspace content by 10 lines |
-| `Ctrl+S` | Save in edit mode (stay in edit mode) |
-| `Ctrl+C` | Quit (or discard edits in edit mode) |
+| `Enter` | Send message |
+| `Tab` | Switch to workspace panel |
+| `←` `→` | Move cursor in input |
+| `Home` / `Ctrl+A` | Jump to start of input |
+| `End` / `Ctrl+E` | Jump to end of input |
+| `Backspace` | Delete character before cursor |
+| `Delete` | Delete character after cursor |
+| `Ctrl+W` | Delete previous word |
+| `Ctrl+K` | Delete to end of line |
+| `Ctrl+U` | Delete to start of line |
+| `↑` / `↓` | Scroll conversation history |
+| `Ctrl+N` | Start a new session |
+| `Ctrl+C` | Quit |
 
-**Edit mode** (amber border) — full terminal editor via `charmbracelet/bubbles` textarea: cursor movement, word wrap, standard editing keys. `Esc` saves and returns to view. `Ctrl+C` discards.
+### Workspace panel (press `Tab` to focus)
+
+| Key | Action |
+|---|---|
+| `Tab` | Return to chat panel |
+| `Esc` | Return to chat panel |
+| `[` / `]` | Previous / next workspace tab |
+| `e` | Enter inline edit mode |
+| `Ctrl+Z` | Undo last change |
+| `Ctrl+E` | Export to `~/cas-exports/` |
+| `↑` / `↓` | Scroll workspace content |
+| `PgUp` / `PgDn` | Scroll by 10 lines |
+
+### Edit mode (press `e` to enter — amber border)
+
+Full terminal editor via `charmbracelet/bubbles` textarea. All standard cursor movement and editing keys work.
+
+| Key | Action |
+|---|---|
+| `Esc` | Save and exit edit mode |
+| `Ctrl+S` | Save without leaving edit mode |
+| `Ctrl+C` | Discard changes and exit |
 
 ---
 
 ## Architecture
 
 ```
-CAS (terminal shell)
-  └── Contracts (deterministic enforcement — Bertrand Meyer's Design by Contract)
-       └── Heddle (optional: MCP mesh runtime, audit logging)
-```
-
-CAS runs standalone. Heddle integration is optional and adds trust enforcement, credential brokering, and tamper-evident audit logging.
-
-```
 internal/
 ├── intent/      Zero-latency intent detection — regex, no LLM call
 ├── contract/    Design by Contract enforcement, fail-closed
-├── workspace/   Workspace lifecycle, three types, contract-enforced
-├── shell/       Session manager, wires all packages, ProcessMessage/StreamMessage
-├── llm/         Ollama + Anthropic streaming/sync clients, model routing
-├── store/       Store interface, SQLiteStore (WAL), MemoryStore (tests)
+├── workspace/   Lifecycle: create, update, undo, close, restore
+├── shell/       Session manager: ProcessMessage, StreamMessage
+├── llm/         Ollama + Anthropic streaming/sync, model routing
+├── store/       Store interface, SQLiteStore (WAL), MemoryStore
 └── conductor/   Behavioral learning — observe, profile, user_context
 ui/              Bubble Tea TUI: split panel, tabs, streaming, inline edit
+tests/tui/       TUI integration tests (spawn real binary via tmux)
 cmd/cas/         Entry point: --db, --memory flags
 ```
+
+**105 unit tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
 
 ---
 
@@ -168,15 +197,7 @@ cd cas
 go build -o cas ./cmd/cas
 ```
 
-### With Anthropic API (no GPU required)
-
-```bash
-export CAS_PROVIDER=anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-./cas
-```
-
-### With Ollama (local, private)
+### Local inference — Ollama
 
 ```bash
 ollama pull qwen3.5:9b
@@ -184,11 +205,27 @@ ollama pull qwen2.5-coder:7b
 ./cas
 ```
 
+### Cloud — Anthropic API (no GPU required)
+
+```bash
+export CAS_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+./cas
+```
+
 ### Flags
 
 ```
-./cas --memory          # in-memory store, no persistence (useful for testing)
-./cas --db /path/to.db  # custom SQLite path (default: ~/.cas/cas.db)
+./cas                   # restore last session (default)
+./cas --memory          # ephemeral session, no persistence
+./cas --db /path/to.db  # custom database path
+```
+
+### Override model routing
+
+```bash
+CAS_MODEL_CODE=qwen3.5:27b ./cas        # use 27b for code workspaces
+CAS_MODEL_DOCUMENT=qwen3:14b ./cas      # use 14b for documents
 ```
 
 ### Tests
@@ -196,9 +233,37 @@ ollama pull qwen2.5-coder:7b
 ```bash
 go test ./...
 
-# LLM integration tests (requires running provider):
-CAS_INTEGRATION=1 go test ./internal/shell/...
+# TUI integration tests — requires tmux + Ollama running
+TUI_INTEGRATION=1 go test -v -tags=integration ./tests/tui/ -timeout 300s
 ```
+
+---
+
+## Export
+
+`Ctrl+E` in workspace focus writes the active tab to `~/cas-exports/`:
+
+- Documents and lists → `.md`
+- Code → extension detected from content (`.py`, `.go`, `.sh`, `.js`, `.rb`, `.txt`)
+
+The directory is created automatically if it doesn't exist.
+
+---
+
+## Part of the WEFT Ecosystem
+
+CAS is the human interface layer of the WEFT stack:
+
+| Project | What it does |
+|---|---|
+| **[heddle](https://github.com/goweft/heddle)** | MCP mesh runtime — optional trust enforcement + audit logging for CAS |
+| **[tenter](https://github.com/goweft/tenter)** | Pre-publish artifact scanner (Python, GitHub Marketplace) |
+| **[tenter-rs](https://github.com/goweft/tenter-rs)** | tenter v2 — Rust static binary |
+| **[unshear](https://github.com/goweft/unshear)** | Fork divergence detector — finds stripped safety mechanisms |
+| **[ratine](https://github.com/goweft/ratine)** | Agent memory poisoning detection |
+| **[crocking](https://github.com/goweft/crocking)** | AI authorship detection |
+
+CAS runs standalone. Heddle integration is optional and adds trust tiers, credential brokering, and tamper-evident audit logging.
 
 ---
 
@@ -208,6 +273,6 @@ Shneiderman & Maes (1997). "Direct Manipulation vs. Interface Agents." *Interact
 
 Meyer (1988). *Object-Oriented Software Construction.* Prentice Hall. (Design by Contract)
 
-Norman (1986). "Cognitive Engineering." In *User Centered System Design.* (Gulf of Execution/Evaluation)
+Norman (1986). "Cognitive Engineering." In *User Centered System Design.*
 
 Horvitz (1999). "Principles of Mixed-Initiative User Interfaces." *CHI '99.*
