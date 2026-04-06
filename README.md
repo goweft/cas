@@ -107,6 +107,26 @@ Say `run it` or `execute` with an active code workspace. CAS detects the languag
 
 No LLM call is needed — intent detection routes directly to the runner.
 
+### Plugins
+
+Drop `.lua` files in `~/.cas/plugins/` to add custom commands without recompiling:
+
+```lua
+-- ~/.cas/plugins/standup.lua
+cas.command("standup", "Daily standup from workspaces", function()
+    local ws = cas.workspaces()
+    local lines = {}
+    for i, w in ipairs(ws) do
+        lines[i] = "- " .. w.title .. " (" .. w.type .. ")"
+    end
+    cas.reply("## Standup\n\n" .. table.concat(lines, "\n"))
+end)
+```
+
+Type `standup` in the chat and the plugin runs — no LLM call, sub-millisecond.
+
+The Lua VM is sandboxed: no file I/O, no `os.execute`, no network. Plugins interact with CAS through a controlled API: `cas.command()`, `cas.reply()`, `cas.workspaces()`, `cas.active()`.
+
 ### Behavioral learning
 
 A Conductor module observes your usage across sessions and builds `~/.cas/profile.json`:
@@ -184,6 +204,7 @@ internal/
 ├── shell/       Session manager: ProcessMessage, StreamMessage
 ├── llm/         Ollama + Anthropic streaming/sync, model routing
 ├── runner/      Code execution — sandboxed subprocess, timeout, env isolation
+├── plugin/      Lua plugin runtime — sandboxed gopher-lua VM
 ├── store/       Store interface, SQLiteStore (WAL), MemoryStore
 └── conductor/   Behavioral learning — observe, profile, user_context
 ui/              Bubble Tea TUI: split panel, tabs, streaming, inline edit
@@ -191,7 +212,7 @@ tests/tui/       TUI integration tests (spawn real binary via tmux)
 cmd/cas/         Entry point: --db, --memory flags
 ```
 
-**193 tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
+**216 tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
 
 ---
 

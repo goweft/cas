@@ -21,6 +21,7 @@ const (
 	KindClose  Kind = "close_workspace"
 	KindRun    Kind = "run_workspace"
 	KindChat   Kind = "chat"
+	KindPlugin Kind = "plugin_command"
 )
 
 // WSType is the workspace type inferred from the message.

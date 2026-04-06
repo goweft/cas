@@ -364,3 +364,85 @@ func containsLower(s, sub string) bool {
 	}
 	return false
 }
+
+
+// ── Plugin commands ───────────────────────────────────────────────
+
+func TestPluginCommandExecutes(t *testing.T) {
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+	os.MkdirAll(pluginDir, 0755)
+	os.WriteFile(filepath.Join(pluginDir, "test.lua"), []byte(`
+cas.command("ping", "Test plugin", function()
+	cas.reply("pong from lua")
+end)
+`), 0644)
+
+	s := store.NewMemoryStore()
+	conductorPath := filepath.Join(t.TempDir(), "profile.json")
+
+	// Create shell with custom plugin dir
+	sh := shell.NewShellWithPlugins(s, conductorPath, pluginDir)
+	sess, _ := sh.CreateSession()
+
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindPlugin {
+		t.Errorf("expected KindPlugin, got %q", resp.Intent)
+	}
+	if resp.ChatReply != "pong from lua" {
+		t.Errorf("expected 'pong from lua', got %q", resp.ChatReply)
+	}
+}
+
+func TestPluginAccessesWorkspaces(t *testing.T) {
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+	os.MkdirAll(pluginDir, 0755)
+	os.WriteFile(filepath.Join(pluginDir, "count.lua"), []byte(`
+cas.command("wcount", "Count workspaces", function()
+	local ws = cas.workspaces()
+	cas.reply("count:" .. #ws)
+end)
+`), 0644)
+
+	s := store.NewMemoryStore()
+	sh := shell.NewShellWithPlugins(s, filepath.Join(t.TempDir(), "p.json"), pluginDir)
+	sess, _ := sh.CreateSession()
+
+	// Create a workspace
+	sh.Workspaces().Create("ws1", "document", "Doc", "content", sess.ID)
+
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "wcount")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.ChatReply != "count:1" {
+		t.Errorf("expected 'count:1', got %q", resp.ChatReply)
+	}
+}
+
+func TestPluginNonMatchFallsThrough(t *testing.T) {
+	// Non-matching messages should not trigger plugins
+	pluginDir := filepath.Join(t.TempDir(), "plugins")
+	os.MkdirAll(pluginDir, 0755)
+	os.WriteFile(filepath.Join(pluginDir, "test.lua"), []byte(`
+cas.command("ping", "P", function() cas.reply("pong") end)
+`), 0644)
+
+	s := store.NewMemoryStore()
+	sh := shell.NewShellWithPlugins(s, filepath.Join(t.TempDir(), "p.json"), pluginDir)
+
+	// "hello" should not match the plugin
+	plugins := sh.Plugins()
+	_, ok := plugins.Match("hello")
+	if ok {
+		t.Error("'hello' should not match any plugin command")
+	}
+
+	// "ping" should match
+	_, ok = plugins.Match("ping")
+	if !ok {
+		t.Error("'ping' should match the plugin command")
+	}
+}

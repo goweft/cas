@@ -15,6 +15,7 @@ import (
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/store"
+	"github.com/goweft/cas/internal/plugin"
 	"github.com/goweft/cas/internal/runner"
 	"github.com/goweft/cas/internal/workspace"
 )
@@ -64,6 +65,7 @@ type Shell struct {
 	workspaces *workspace.Manager
 	sessions   map[string]*Session
 	conductor  *conductor.Conductor
+	plugins    *plugin.Registry
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -73,14 +75,30 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 	if len(conductorPath) > 0 {
 		path = conductorPath[0]
 	}
-	return &Shell{
+	sh := &Shell{
 		store:      s,
 		workspaces: workspace.NewManager(s),
 		sessions:   make(map[string]*Session),
 		conductor:  conductor.New(path),
+		plugins:    plugin.New(plugin.DefaultDir()),
 	}
+	sh.plugins.Load()
+	return sh
 }
 
+
+// NewShellWithPlugins creates a Shell with a custom plugin directory.
+func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell {
+	sh := &Shell{
+		store:      s,
+		workspaces: workspace.NewManager(s),
+		sessions:   make(map[string]*Session),
+		conductor:  conductor.New(conductorPath),
+		plugins:    plugin.New(pluginDir),
+	}
+	sh.plugins.Load()
+	return sh
+}
 // Restore loads persisted sessions and workspaces from the store.
 func (sh *Shell) Restore() error {
 	if err := sh.workspaces.Restore(); err != nil {
@@ -153,6 +171,15 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		return nil, err
 	}
 
+	// Check plugin commands first — user-defined overrides
+	if cmd, ok := sh.plugins.Match(message); ok {
+		userMsg := sess.addMessage("user", message)
+		if err := sh.store.SaveMessage(toStoreMsg(userMsg)); err != nil {
+			return nil, err
+		}
+		return sh.handlePlugin(sess, cmd)
+	}
+
 	in := intent.Detect(message)
 	userMsg := sess.addMessage("user", message)
 	if err := sh.store.SaveMessage(toStoreMsg(userMsg)); err != nil {
@@ -196,6 +223,19 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 	sess, err := sh.GetSession(sessionID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check plugin commands first
+	if cmd, ok := sh.plugins.Match(message); ok {
+		userMsg := sess.addMessage("user", message)
+		if err := sh.store.SaveMessage(toStoreMsg(userMsg)); err != nil {
+			return nil, err
+		}
+		r, err := sh.handlePlugin(sess, cmd)
+		if err != nil {
+			return nil, err
+		}
+		return &StreamResponse{ChatReply: r.ChatReply, Intent: r.Intent}, nil
 	}
 
 	in := intent.Detect(message)
@@ -392,6 +432,37 @@ func (sh *Shell) handleRun(ctx context.Context, sess *Session) (*Response, error
 		Intent:    intent.KindRun,
 	}, nil
 }
+
+func (sh *Shell) handlePlugin(sess *Session, cmd *plugin.Command) (*Response, error) {
+	// Build plugin context from active workspaces
+	active := sh.workspaces.Active()
+	wsInfos := make([]plugin.WorkspaceInfo, len(active))
+	for i, ws := range active {
+		wsInfos[i] = plugin.WorkspaceInfo{
+			ID:      ws.ID,
+			Type:    ws.Type,
+			Title:   ws.Title,
+			Content: ws.Content,
+		}
+	}
+
+	ctx := &plugin.Context{Workspaces: wsInfos}
+	reply, err := sh.plugins.Execute(cmd, ctx)
+	if err != nil {
+		reply = fmt.Sprintf("Plugin error: %v", err)
+	}
+
+	shellMsg := sess.addMessage("shell", reply)
+	if err := sh.store.SaveMessage(toStoreMsg(shellMsg)); err != nil {
+		return nil, err
+	}
+
+	sh.conductor.Observe(string(intent.KindPlugin), cmd.Name, "", "")
+	return &Response{ChatReply: reply, Intent: intent.KindPlugin}, nil
+}
+
+// Plugins returns the plugin registry for inspection.
+func (sh *Shell) Plugins() *plugin.Registry { return sh.plugins }
 
 // ── Helpers ───────────────────────────────────────────────────────
 
