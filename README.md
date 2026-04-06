@@ -45,27 +45,7 @@ This resolves a debate in HCI running since 1997. Shneiderman argued that direct
 
 ## See It Work
 
-```
-┌─ chat ───────────────────────────┐ ┌─ [l] Todo List For Ea ─────────────────────────┐
-│                                  │ │                                                 │
-│ you › make a todo list for       │ │  Easter Todo List                               │
-│       easter                     │ │                                                 │
-│                                  │ │  ## 🗓 Planning & Budget                        │
-│ cas › Created list workspace     │ │                                                 │
-│       "Todo List For Easter".    │ │  [ ] Set date and time for Easter Sunday        │
-│       Edit directly or ask me    │ │  [ ] Confirm guest list and RSVPs               │
-│       to make changes.           │ │  [ ] Create budget for food and decorations     │
-│                                  │ │  [ ] Check availability of family members       │
-│ you › add a shopping section     │ │  [ ] Book any necessary reservations            │
-│                                  │ │                                                 │
-│ cas › Updated workspace          │ │  ## 🛒 Shopping List                            │
-│       "Todo List For Easter".    │ │                                                 │
-│                                  │ │  [ ] Ham or lamb (serves 8)                     │
-│ ────────────────────────────── │ │  [ ] Eggs for dying                             │
-│ > █                              │ │                                          ↕ 0%   │
-└──────────────────────────────────┘ └─────────────────────────────────────────────────┘
-  ↑↓: scroll history  │  enter: send  │  tab: workspace  │  ctrl+n: new session  │  ctrl+c: quit
-```
+<p align="center"><img src="demo.svg" alt="CAS demo — animated" width="100%"></p>
 
 Tokens stream into the workspace as they are generated. The left panel is persistent conversation. The right panel is the workspace you control directly. Multiple workspaces open as tabs — `[d]` document, `[c]` code, `[l]` list.
 

@@ -1,0 +1,215 @@
+<svg viewBox="0 0 1200 620" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono','Fira Code','Cascadia Code','JetBrains Mono',Menlo,Monaco,Consolas,monospace" font-size="13">
+  <style>
+    @keyframes blink { 0%,49% { opacity:1 } 50%,100% { opacity:0 } }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+    /* Phase 1: User types "make a todo list for easter" (0s-2.5s) */
+    .type1-1  { opacity:0; animation: fadeIn .01s 0.1s forwards }
+    .type1-2  { opacity:0; animation: fadeIn .01s 0.17s forwards }
+    .type1-3  { opacity:0; animation: fadeIn .01s 0.24s forwards }
+    .type1-4  { opacity:0; animation: fadeIn .01s 0.31s forwards }
+    .type1-5  { opacity:0; animation: fadeIn .01s 0.38s forwards }
+    .type1-6  { opacity:0; animation: fadeIn .01s 0.45s forwards }
+    .type1-7  { opacity:0; animation: fadeIn .01s 0.52s forwards }
+    .type1-8  { opacity:0; animation: fadeIn .01s 0.59s forwards }
+    .type1-9  { opacity:0; animation: fadeIn .01s 0.66s forwards }
+    .type1-10 { opacity:0; animation: fadeIn .01s 0.73s forwards }
+    .type1-11 { opacity:0; animation: fadeIn .01s 0.80s forwards }
+    .type1-12 { opacity:0; animation: fadeIn .01s 0.87s forwards }
+    .type1-13 { opacity:0; animation: fadeIn .01s 0.94s forwards }
+    .type1-14 { opacity:0; animation: fadeIn .01s 1.01s forwards }
+    .type1-15 { opacity:0; animation: fadeIn .01s 1.08s forwards }
+    .type1-16 { opacity:0; animation: fadeIn .01s 1.15s forwards }
+    .type1-17 { opacity:0; animation: fadeIn .01s 1.22s forwards }
+    .type1-18 { opacity:0; animation: fadeIn .01s 1.29s forwards }
+    .type1-19 { opacity:0; animation: fadeIn .01s 1.36s forwards }
+    .type1-20 { opacity:0; animation: fadeIn .01s 1.43s forwards }
+    .type1-21 { opacity:0; animation: fadeIn .01s 1.50s forwards }
+    .type1-22 { opacity:0; animation: fadeIn .01s 1.57s forwards }
+    .type1-23 { opacity:0; animation: fadeIn .01s 1.64s forwards }
+    .type1-24 { opacity:0; animation: fadeIn .01s 1.71s forwards }
+    .type1-25 { opacity:0; animation: fadeIn .01s 1.78s forwards }
+    .type1-26 { opacity:0; animation: fadeIn .01s 1.85s forwards }
+    .type1-27 { opacity:0; animation: fadeIn .01s 1.92s forwards }
+    .type1-28 { opacity:0; animation: fadeIn .01s 1.99s forwards }
+    .type1-29 { opacity:0; animation: fadeIn .01s 2.06s forwards }
+    .type1-30 { opacity:0; animation: fadeIn .01s 2.13s forwards }
+
+    /* Phase 2: CAS responds + workspace appears (2.8s-3.5s) */
+    .cas-reply-1 { opacity:0; animation: fadeIn .2s 2.8s forwards }
+
+    /* Phase 3: Workspace tab + header (3.0s) */
+    .ws-appear { opacity:0; animation: fadeIn .15s 3.0s forwards }
+
+    /* Phase 4: Workspace content streams in (3.2s-6.5s) */
+    .stream-1  { opacity:0; animation: fadeIn .01s 3.3s forwards }
+    .stream-2  { opacity:0; animation: fadeIn .01s 3.5s forwards }
+    .stream-3  { opacity:0; animation: fadeIn .01s 3.7s forwards }
+    .stream-4  { opacity:0; animation: fadeIn .01s 3.85s forwards }
+    .stream-5  { opacity:0; animation: fadeIn .01s 4.0s forwards }
+    .stream-6  { opacity:0; animation: fadeIn .01s 4.15s forwards }
+    .stream-7  { opacity:0; animation: fadeIn .01s 4.3s forwards }
+    .stream-8  { opacity:0; animation: fadeIn .01s 4.5s forwards }
+    .stream-9  { opacity:0; animation: fadeIn .01s 4.7s forwards }
+    .stream-10 { opacity:0; animation: fadeIn .01s 4.9s forwards }
+    .stream-11 { opacity:0; animation: fadeIn .01s 5.1s forwards }
+    .stream-12 { opacity:0; animation: fadeIn .01s 5.3s forwards }
+    .stream-13 { opacity:0; animation: fadeIn .01s 5.5s forwards }
+
+    /* Phase 5: User types "add a shopping section" (6.5s-8.5s) */
+    .type2-1  { opacity:0; animation: fadeIn .01s 6.5s forwards }
+    .type2-2  { opacity:0; animation: fadeIn .01s 6.57s forwards }
+    .type2-3  { opacity:0; animation: fadeIn .01s 6.64s forwards }
+    .type2-4  { opacity:0; animation: fadeIn .01s 6.71s forwards }
+    .type2-5  { opacity:0; animation: fadeIn .01s 6.78s forwards }
+    .type2-6  { opacity:0; animation: fadeIn .01s 6.85s forwards }
+    .type2-7  { opacity:0; animation: fadeIn .01s 6.92s forwards }
+    .type2-8  { opacity:0; animation: fadeIn .01s 6.99s forwards }
+    .type2-9  { opacity:0; animation: fadeIn .01s 7.06s forwards }
+    .type2-10 { opacity:0; animation: fadeIn .01s 7.13s forwards }
+    .type2-11 { opacity:0; animation: fadeIn .01s 7.20s forwards }
+    .type2-12 { opacity:0; animation: fadeIn .01s 7.27s forwards }
+    .type2-13 { opacity:0; animation: fadeIn .01s 7.34s forwards }
+    .type2-14 { opacity:0; animation: fadeIn .01s 7.41s forwards }
+    .type2-15 { opacity:0; animation: fadeIn .01s 7.48s forwards }
+    .type2-16 { opacity:0; animation: fadeIn .01s 7.55s forwards }
+    .type2-17 { opacity:0; animation: fadeIn .01s 7.62s forwards }
+    .type2-18 { opacity:0; animation: fadeIn .01s 7.69s forwards }
+    .type2-19 { opacity:0; animation: fadeIn .01s 7.76s forwards }
+    .type2-20 { opacity:0; animation: fadeIn .01s 7.83s forwards }
+    .type2-21 { opacity:0; animation: fadeIn .01s 7.90s forwards }
+    .type2-22 { opacity:0; animation: fadeIn .01s 7.97s forwards }
+
+    /* Phase 6: CAS reply + workspace update (8.5s-10s) */
+    .cas-reply-2 { opacity:0; animation: fadeIn .2s 8.5s forwards }
+    .stream-new-1 { opacity:0; animation: fadeIn .01s 9.0s forwards }
+    .stream-new-2 { opacity:0; animation: fadeIn .01s 9.15s forwards }
+    .stream-new-3 { opacity:0; animation: fadeIn .01s 9.3s forwards }
+    .stream-new-4 { opacity:0; animation: fadeIn .01s 9.45s forwards }
+    .stream-new-5 { opacity:0; animation: fadeIn .01s 9.6s forwards }
+    .stream-new-6 { opacity:0; animation: fadeIn .01s 9.75s forwards }
+
+    .cursor { animation: blink 1s step-end infinite; fill: #cdd6f4 }
+  </style>
+
+  <defs>
+    <clipPath id="chat-clip"><rect x="16" y="40" width="468" height="530"/></clipPath>
+    <clipPath id="ws-clip"><rect x="500" y="40" width="684" height="530"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="620" rx="10" fill="#1e1e2e"/>
+
+  <!-- Window dots -->
+  <circle cx="30" cy="16" r="6" fill="#f38ba8"/>
+  <circle cx="50" cy="16" r="6" fill="#f9e2af"/>
+  <circle cx="70" cy="16" r="6" fill="#a6e3a1"/>
+
+  <!-- Title bar -->
+  <text x="600" y="20" text-anchor="middle" fill="#6c7086" font-size="12">cas — 120×40</text>
+
+  <!-- ═══ CHAT PANEL ═══ -->
+  <!-- Chat border -->
+  <rect x="16" y="32" width="468" height="548" rx="4" fill="none" stroke="#45475a" stroke-width="1"/>
+  <!-- Chat header -->
+  <text x="28" y="48" fill="#89b4fa" font-size="11" font-weight="bold">─ chat ─</text>
+
+  <g clip-path="url(#chat-clip)">
+    <!-- User message 1 -->
+    <text x="28" y="80" fill="#89dceb" font-size="13" font-weight="bold">you ›</text>
+    <!-- Typing animation for "make a todo list for easter" -->
+    <text y="80" fill="#cdd6f4" font-size="13">
+      <tspan x="78" class="type1-1">m</tspan><tspan class="type1-2">a</tspan><tspan class="type1-3">k</tspan><tspan class="type1-4">e</tspan><tspan class="type1-5"> </tspan><tspan class="type1-6">a</tspan><tspan class="type1-7"> </tspan><tspan class="type1-8">t</tspan><tspan class="type1-9">o</tspan><tspan class="type1-10">d</tspan><tspan class="type1-11">o</tspan><tspan class="type1-12"> </tspan><tspan class="type1-13">l</tspan><tspan class="type1-14">i</tspan><tspan class="type1-15">s</tspan><tspan class="type1-16">t</tspan><tspan class="type1-17"> </tspan><tspan class="type1-18">f</tspan><tspan class="type1-19">o</tspan><tspan class="type1-20">r</tspan><tspan class="type1-21"> </tspan><tspan class="type1-22">e</tspan><tspan class="type1-23">a</tspan><tspan class="type1-24">s</tspan><tspan class="type1-25">t</tspan><tspan class="type1-26">e</tspan><tspan class="type1-27">r</tspan>
+    </text>
+
+    <!-- CAS reply 1 -->
+    <g class="cas-reply-1">
+      <text x="28" y="110" fill="#a6e3a1" font-size="13" font-weight="bold">cas ›</text>
+      <text x="78" y="110" fill="#bac2de" font-size="13">Created list workspace</text>
+      <text x="78" y="128" fill="#bac2de" font-size="13">"Todo List For Easter".</text>
+      <text x="78" y="146" fill="#bac2de" font-size="13">Edit directly or ask me</text>
+      <text x="78" y="164" fill="#bac2de" font-size="13">to make changes.</text>
+    </g>
+
+    <!-- User message 2 -->
+    <text x="28" y="200" fill="#89dceb" font-size="13" font-weight="bold" class="type2-1">you ›</text>
+    <text y="200" fill="#cdd6f4" font-size="13">
+      <tspan x="78" class="type2-1">a</tspan><tspan class="type2-2">d</tspan><tspan class="type2-3">d</tspan><tspan class="type2-4"> </tspan><tspan class="type2-5">a</tspan><tspan class="type2-6"> </tspan><tspan class="type2-7">s</tspan><tspan class="type2-8">h</tspan><tspan class="type2-9">o</tspan><tspan class="type2-10">p</tspan><tspan class="type2-11">p</tspan><tspan class="type2-12">i</tspan><tspan class="type2-13">n</tspan><tspan class="type2-14">g</tspan><tspan class="type2-15"> </tspan><tspan class="type2-16">s</tspan><tspan class="type2-17">e</tspan><tspan class="type2-18">c</tspan><tspan class="type2-19">t</tspan><tspan class="type2-20">i</tspan><tspan class="type2-21">o</tspan><tspan class="type2-22">n</tspan>
+    </text>
+
+    <!-- CAS reply 2 -->
+    <g class="cas-reply-2">
+      <text x="28" y="230" fill="#a6e3a1" font-size="13" font-weight="bold">cas ›</text>
+      <text x="78" y="230" fill="#bac2de" font-size="13">Updated workspace</text>
+      <text x="78" y="248" fill="#bac2de" font-size="13">"Todo List For Easter".</text>
+    </g>
+
+    <!-- Input area -->
+    <line x1="28" y1="525" x2="472" y2="525" stroke="#45475a"/>
+    <text x="28" y="545" fill="#585b70" font-size="13">›</text>
+    <rect x="42" y="534" width="8" height="15" class="cursor"/>
+  </g>
+
+  <!-- ═══ WORKSPACE PANEL ═══ -->
+  <!-- WS border -->
+  <rect x="500" y="32" width="684" height="548" rx="4" fill="none" stroke="#45475a" stroke-width="1"/>
+
+  <!-- Empty state (before workspace) -->
+  <text x="842" y="300" text-anchor="middle" fill="#45475a" font-size="13" class="">Ask the chat to create a workspace.</text>
+
+  <!-- Workspace tab + content (appears at phase 3) -->
+  <g class="ws-appear">
+    <!-- Tab -->
+    <rect x="504" y="35" width="220" height="22" rx="2" fill="#313244"/>
+    <text x="512" y="51" fill="#f9e2af" font-size="11" font-weight="bold">[l]</text>
+    <text x="532" y="51" fill="#cdd6f4" font-size="11">Todo List For Easter</text>
+
+    <!-- WS background (covers empty state) -->
+    <rect x="501" y="58" width="682" height="520" fill="#1e1e2e"/>
+
+    <!-- Scrollbar track -->
+    <rect x="1170" y="60" width="4" height="510" rx="2" fill="#313244"/>
+  </g>
+
+  <g clip-path="url(#ws-clip)">
+    <!-- Streaming workspace content -->
+    <text x="520" y="90" fill="#cdd6f4" font-size="15" font-weight="bold" class="stream-1">Easter Todo List</text>
+
+    <text x="520" y="125" fill="#89b4fa" font-size="13" font-weight="bold" class="stream-2">## 🗓 Planning &amp; Budget</text>
+
+    <text x="520" y="155" fill="#cdd6f4" font-size="13" class="stream-3">☐  Set date and time for Easter Sunday</text>
+    <text x="520" y="175" fill="#cdd6f4" font-size="13" class="stream-4">☐  Confirm guest list and RSVPs</text>
+    <text x="520" y="195" fill="#cdd6f4" font-size="13" class="stream-5">☐  Create budget for food and</text>
+    <text x="545" y="213" fill="#cdd6f4" font-size="13" class="stream-6">decorations</text>
+    <text x="520" y="233" fill="#cdd6f4" font-size="13" class="stream-7">☐  Check availability of family members</text>
+    <text x="520" y="253" fill="#cdd6f4" font-size="13" class="stream-8">☐  Book any necessary reservations</text>
+
+    <text x="520" y="288" fill="#89b4fa" font-size="13" font-weight="bold" class="stream-9">## 🍳 Food Prep</text>
+
+    <text x="520" y="318" fill="#cdd6f4" font-size="13" class="stream-10">☐  Plan Easter brunch menu</text>
+    <text x="520" y="338" fill="#cdd6f4" font-size="13" class="stream-11">☐  Order ham or lamb (serves 8)</text>
+    <text x="520" y="358" fill="#cdd6f4" font-size="13" class="stream-12">☐  Buy eggs for dying</text>
+    <text x="520" y="378" fill="#cdd6f4" font-size="13" class="stream-13">☐  Bake hot cross buns (Saturday)</text>
+
+    <!-- New section streams in after "add a shopping section" -->
+    <text x="520" y="413" fill="#89b4fa" font-size="13" font-weight="bold" class="stream-new-1">## 🛒 Shopping List</text>
+
+    <text x="520" y="443" fill="#cdd6f4" font-size="13" class="stream-new-2">☐  Ham or lamb (serves 8)</text>
+    <text x="520" y="463" fill="#cdd6f4" font-size="13" class="stream-new-3">☐  Eggs — 2 dozen for dying</text>
+    <text x="520" y="483" fill="#cdd6f4" font-size="13" class="stream-new-4">☐  Spring flower arrangements</text>
+    <text x="520" y="503" fill="#cdd6f4" font-size="13" class="stream-new-5">☐  Pastel napkins and tablecloth</text>
+    <text x="520" y="523" fill="#cdd6f4" font-size="13" class="stream-new-6">☐  Chocolate eggs and candy</text>
+  </g>
+
+  <!-- Status bar -->
+  <rect x="0" y="590" width="1200" height="30" fill="#181825"/>
+  <text x="20" y="609" fill="#585b70" font-size="11">↑↓: scroll history</text>
+  <text x="195" y="609" fill="#45475a" font-size="11">│</text>
+  <text x="210" y="609" fill="#585b70" font-size="11">enter: send</text>
+  <text x="325" y="609" fill="#45475a" font-size="11">│</text>
+  <text x="340" y="609" fill="#585b70" font-size="11">tab: workspace</text>
+  <text x="480" y="609" fill="#45475a" font-size="11">│</text>
+  <text x="495" y="609" fill="#585b70" font-size="11">ctrl+n: new session</text>
+  <text x="670" y="609" fill="#45475a" font-size="11">│</text>
+  <text x="685" y="609" fill="#585b70" font-size="11">ctrl+c: quit</text>
+</svg>
