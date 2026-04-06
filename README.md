@@ -66,6 +66,8 @@ Every message is classified before any model is invoked:
 "how long should this be?"       → chat reply
 "edit it directly"               → chat  ← self-edit exclusion fires first
 "close the workspace"            → close active tab
+"run it"                         → execute active code workspace
+"test this"                      → execute active code workspace
 ```
 
 Pure regex, sub-millisecond. Self-edit phrases are checked before edit patterns so "edit it directly" never triggers an unwanted LLM call.
@@ -93,6 +95,17 @@ Contracts run in Go, external to the model. The model cannot modify, bypass, or 
 ### Streaming
 
 A placeholder tab appears immediately on create. Tokens stream into it via a buffered channel feeding one event per Bubble Tea tick. The workspace is live from the first token. No separate loading state.
+
+### Code execution
+
+Say `run it` or `execute` with an active code workspace. CAS detects the language from content (bash, Python, Go, JavaScript, Ruby), writes to a temp file, and executes in a sandboxed subprocess with:
+
+- Process group isolation — timeout kills the entire tree, not just the leader
+- Environment restriction — only `PATH` is inherited, no secrets leak
+- 30-second default timeout
+- stdout and stderr captured and displayed in the chat panel
+
+No LLM call is needed — intent detection routes directly to the runner.
 
 ### Behavioral learning
 
@@ -170,6 +183,7 @@ internal/
 ├── workspace/   Lifecycle: create, update, undo, close, restore
 ├── shell/       Session manager: ProcessMessage, StreamMessage
 ├── llm/         Ollama + Anthropic streaming/sync, model routing
+├── runner/      Code execution — sandboxed subprocess, timeout, env isolation
 ├── store/       Store interface, SQLiteStore (WAL), MemoryStore
 └── conductor/   Behavioral learning — observe, profile, user_context
 ui/              Bubble Tea TUI: split panel, tabs, streaming, inline edit
@@ -177,7 +191,7 @@ tests/tui/       TUI integration tests (spawn real binary via tmux)
 cmd/cas/         Entry point: --db, --memory flags
 ```
 
-**138 unit tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
+**193 tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
 
 ---
 
