@@ -15,6 +15,18 @@
   <a href="#quick-start">Quick Start</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/goweft/cas/actions/workflows/ci.yml">
+    <img src="https://github.com/goweft/cas/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License: Apache 2.0">
+  </a>
+  <a href="https://go.dev/">
+    <img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg" alt="Go 1.22+">
+  </a>
+</p>
+
 ---
 
 ## The Idea
