@@ -2,6 +2,7 @@ package shell_test
 
 import (
 	"context"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -446,3 +447,36 @@ cas.command("ping", "P", function() cas.reply("pong") end)
 		t.Error("'ping' should match the plugin command")
 	}
 }
+
+
+// ── Combine workspace ─────────────────────────────────────────────
+
+func TestCombineNeedsTwoWorkspaces(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+
+	// Zero workspaces
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "combine everything")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindCombine {
+		t.Errorf("expected KindCombine, got %q", resp.Intent)
+	}
+	if !strings.Contains(resp.ChatReply, "at least 2") {
+		t.Errorf("expected 'at least 2' message, got %q", resp.ChatReply)
+	}
+
+	// One workspace
+	sh.Workspaces().Create("ws1", "document", "Proposal", "content", sess.ID)
+	resp, err = sh.ProcessMessage(context.Background(), sess.ID, "combine all workspaces")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(resp.ChatReply, "at least 2") {
+		t.Errorf("expected 'at least 2' message with 1 workspace, got %q", resp.ChatReply)
+	}
+}
+
+
+

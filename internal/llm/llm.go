@@ -405,6 +405,40 @@ func BuildChatMessages(system string, history []Message, userMessage string) []M
 	return msgs
 }
 
+// BuildCombineMessages constructs the message slice for cross-workspace combine.
+// Each workspace's content is included as a labeled section.
+func BuildCombineMessages(system, userMessage string, workspaces []struct{ Title, Type, Content string }) []Message {
+	var sections strings.Builder
+	for i, ws := range workspaces {
+		if i > 0 {
+			sections.WriteString("\n\n---\n\n")
+		}
+		sections.WriteString(fmt.Sprintf("## Source %d: %s (%s)\n\n%s", i+1, ws.Title, ws.Type, ws.Content))
+	}
+	return []Message{
+		{Role: "system", Content: system},
+		{Role: "user", Content: fmt.Sprintf(
+			"Source workspaces:\n\n%s\n\nRequest: %s",
+			sections.String(), userMessage,
+		)},
+	}
+}
+
+// BuildEditWithContextMessages constructs an edit message with additional workspace context.
+func BuildEditWithContextMessages(system, title, current, editRequest string, refs []struct{ Title, Content string }) []Message {
+	var context strings.Builder
+	for _, ref := range refs {
+		context.WriteString(fmt.Sprintf("\n\n--- Referenced workspace: %s ---\n%s", ref.Title, ref.Content))
+	}
+	return []Message{
+		{Role: "system", Content: system},
+		{Role: "user", Content: fmt.Sprintf(
+			"Title: %s\n\nCurrent content:\n%s%s\n\nChange request: %s",
+			title, current, context.String(), editRequest,
+		)},
+	}
+}
+
 // ── System prompts ────────────────────────────────────────────────
 
 var WorkspaceSystem = map[string]string{
@@ -431,6 +465,13 @@ var EditSystem = map[string]string{
 		"Apply the requested change and return the complete updated list in markdown. " +
 		"Preserve all existing items not affected by the change. Output only the updated list.",
 }
+
+var CombineSystem = "You are a document synthesis assistant. " +
+	"You are given the content of multiple workspaces. " +
+	"Combine them into a single cohesive document with clear structure. " +
+	"Preserve important content from each source. " +
+	"Use markdown with appropriate headings. " +
+	"Output only the combined document — no preamble, no explanation."
 
 const ChatSystem = `You are CAS — a Conversational Agent Shell.
 CAS creates and edits workspaces (documents, code, lists) from conversation.

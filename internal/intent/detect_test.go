@@ -205,3 +205,49 @@ func TestRunBeforeSelfEdit(t *testing.T) {
 		t.Errorf("expected KindRun for 'run it', got %q", got.Kind)
 	}
 }
+
+
+// ── Combine intent tests ──────────────────────────────────────────
+
+func TestCombineIntent(t *testing.T) {
+	cases := []struct {
+		message string
+		want    intent.Kind
+	}{
+		{"combine the proposal and the checklist", intent.KindCombine},
+		{"merge the proposal and the script", intent.KindCombine},
+		{"combine all workspaces", intent.KindCombine},
+		{"merge all documents", intent.KindCombine},
+		{"merge these workspaces", intent.KindCombine},
+		{"put the proposal and checklist together", intent.KindCombine},
+		{"consolidate everything", intent.KindCombine},
+		{"combine report with the notes", intent.KindCombine},
+		{"merge notes and summary", intent.KindCombine},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != tc.want {
+				t.Errorf("Detect(%q) = %q, want %q", tc.message, got.Kind, tc.want)
+			}
+		})
+	}
+}
+
+func TestCombineDoesNotMatchNormal(t *testing.T) {
+	cases := []struct {
+		message string
+	}{
+		{"how do I combine these colors?"},
+		{"write a proposal"},
+		{"add a section"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind == intent.KindCombine {
+				t.Errorf("Detect(%q) should not be KindCombine", tc.message)
+			}
+		})
+	}
+}

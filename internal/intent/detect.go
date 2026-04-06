@@ -3,11 +3,12 @@
 //
 // Priority order (must be preserved):
 //  1. Close patterns
-//  2. Run patterns — execute active code workspace
-//  3. Self-edit exclusions — user signals they will edit manually → chat
-//  4. Edit patterns
-//  5. Create patterns
-//  6. Chat (default)
+//  2. Run patterns
+//  3. Combine patterns — merge multiple workspaces — execute active code workspace
+//  4. Self-edit exclusions — user signals they will edit manually → chat
+//  5. Edit patterns
+//  6. Create patterns
+//  7. Chat (default)
 package intent
 
 import "regexp"
@@ -21,7 +22,8 @@ const (
 	KindClose  Kind = "close_workspace"
 	KindRun    Kind = "run_workspace"
 	KindChat   Kind = "chat"
-	KindPlugin Kind = "plugin_command"
+	KindPlugin  Kind = "plugin_command"
+	KindCombine Kind = "combine_workspaces"
 )
 
 // WSType is the workspace type inferred from the message.
@@ -66,6 +68,7 @@ var editPatterns []*regexp.Regexp
 var selfEditPatterns []*regexp.Regexp
 var closePatterns []*regexp.Regexp
 var runPatterns []*regexp.Regexp
+var combinePatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
 
 func init() {
@@ -120,6 +123,18 @@ func init() {
 		ci(`(?i)^run\s+and\s+show\s+(me\s+)?(the\s+)?output\.?$`),                   // "run and show me the output"
 	}
 
+	// Combine/merge patterns — reference multiple workspaces
+	combinePatterns = []*regexp.Regexp{
+		ci(`(?i)^combine\b`),
+		ci(`(?i)^merge\b`),
+		ci(`(?i)^put .+ (and|&) .+ together`),
+		ci(`(?i)^consolidate\b`),
+		ci(`(?i)\bcombine .+ (and|with|&) .+`),
+		ci(`(?i)\bmerge .+ (and|with|&) .+`),
+		ci(`(?i)\bcombine (all|these|the) (workspace|document|tab)`),
+		ci(`(?i)\bmerge (all|these|the) (workspace|document|tab)`),
+	}
+
 	titleHintRe = regexp.MustCompile(
 		`(?i)\b(?:write|draft|create|make|start|begin|compose)\s+(?:me\s+)?(?:a|an|the|my|our)?\s*(.+)`,
 	)
@@ -136,6 +151,11 @@ func Detect(message string) Intent {
 	for _, re := range runPatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindRun, WSType: WSCode}
+		}
+	}
+	for _, re := range combinePatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindCombine, WSType: WSDocument}
 		}
 	}
 	for _, re := range selfEditPatterns {

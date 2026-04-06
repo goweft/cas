@@ -196,6 +196,8 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		resp, err = sh.handleClose(sess)
 	case intent.KindRun:
 		resp, err = sh.handleRun(ctx, sess)
+	case intent.KindCombine:
+		resp, err = sh.handleCombine(ctx, sess, message)
 	default:
 		resp, err = sh.handleChat(ctx, sess, message)
 	}
@@ -262,6 +264,8 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 			return nil, e
 		}
 		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
+	case intent.KindCombine:
+		resp, err = sh.streamCombine(ctx, sess, message, onToken)
 	default:
 		resp, err = sh.streamChat(ctx, sess, message, onToken)
 	}
@@ -324,9 +328,22 @@ func (sh *Shell) handleEdit(ctx context.Context, sess *Session, message string) 
 	if len(active) == 0 {
 		return &Response{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
-	ws := active[len(active)-1]
+	ws := resolveTarget(message, active)
 	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
-	msgs := llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+
+	// Check if the message references other workspaces for cross-workspace context
+	refs := crossWorkspaceRefs(message, active, ws)
+	var msgs []llm.Message
+	if len(refs) > 0 {
+		refData := make([]struct{ Title, Content string }, len(refs))
+		for i, r := range refs {
+			refData[i] = struct{ Title, Content string }{r.Title, r.Content}
+		}
+		msgs = llm.BuildEditWithContextMessages(sys, ws.Title, ws.Content, message, refData)
+	} else {
+		msgs = llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+	}
+
 	content, err := llm.Complete(ctx, msgs, llm.ModelFor(ws.Type), 0.3)
 	if err != nil {
 		return nil, err
@@ -344,9 +361,21 @@ func (sh *Shell) streamEdit(ctx context.Context, sess *Session, message string, 
 	if len(active) == 0 {
 		return &StreamResponse{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
-	ws := active[len(active)-1]
+	ws := resolveTarget(message, active)
 	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
-	msgs := llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+
+	refs := crossWorkspaceRefs(message, active, ws)
+	var msgs []llm.Message
+	if len(refs) > 0 {
+		refData := make([]struct{ Title, Content string }, len(refs))
+		for i, r := range refs {
+			refData[i] = struct{ Title, Content string }{r.Title, r.Content}
+		}
+		msgs = llm.BuildEditWithContextMessages(sys, ws.Title, ws.Content, message, refData)
+	} else {
+		msgs = llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+	}
+
 	content, err := llm.Stream(ctx, msgs, llm.ModelFor(ws.Type), 0.3, onToken)
 	if err != nil {
 		return nil, err
@@ -463,6 +492,125 @@ func (sh *Shell) handlePlugin(sess *Session, cmd *plugin.Command) (*Response, er
 
 // Plugins returns the plugin registry for inspection.
 func (sh *Shell) Plugins() *plugin.Registry { return sh.plugins }
+
+func (sh *Shell) handleCombine(ctx context.Context, sess *Session, message string) (*Response, error) {
+	active := sh.workspaces.Active()
+	if len(active) < 2 {
+		return &Response{
+			ChatReply: "Need at least 2 active workspaces to combine.",
+			Intent:    intent.KindCombine,
+		}, nil
+	}
+
+	sources := resolveAll(message, active)
+	if len(sources) < 2 {
+		return &Response{
+			ChatReply: "Could not identify 2 or more workspaces to combine. Try naming them explicitly.",
+			Intent:    intent.KindCombine,
+		}, nil
+	}
+
+	wsData := make([]struct{ Title, Type, Content string }, len(sources))
+	for i, s := range sources {
+		wsData[i] = struct{ Title, Type, Content string }{s.Title, s.Type, s.Content}
+	}
+
+	sys := llm.CombineSystem
+	if uc := sh.conductor.UserContext(); uc != "" {
+		sys += "\n\nUser context: " + uc
+	}
+	msgs := llm.BuildCombineMessages(sys, message, wsData)
+	combined, err := llm.Complete(ctx, msgs, llm.ModelFor("document"), 0.5)
+	if err != nil {
+		return nil, err
+	}
+
+	titles := make([]string, len(sources))
+	for i, s := range sources {
+		titles[i] = s.Title
+	}
+	title := "Combined: " + strings.Join(titles, " + ")
+	if len(title) > 64 {
+		title = title[:61] + "..."
+	}
+
+	ws, err := sh.workspaces.Create(newID(), "document", title, combined, sess.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	reply := fmt.Sprintf("Combined %d workspaces into %q.", len(sources), ws.Title)
+	return &Response{ChatReply: reply, Workspace: ws, Intent: intent.KindCombine}, nil
+}
+
+func (sh *Shell) streamCombine(ctx context.Context, sess *Session, message string, onToken func(string)) (*StreamResponse, error) {
+	active := sh.workspaces.Active()
+	if len(active) < 2 {
+		return &StreamResponse{
+			ChatReply: "Need at least 2 active workspaces to combine.",
+			Intent:    intent.KindCombine,
+		}, nil
+	}
+
+	sources := resolveAll(message, active)
+	if len(sources) < 2 {
+		return &StreamResponse{
+			ChatReply: "Could not identify 2 or more workspaces to combine. Try naming them explicitly.",
+			Intent:    intent.KindCombine,
+		}, nil
+	}
+
+	wsData := make([]struct{ Title, Type, Content string }, len(sources))
+	for i, s := range sources {
+		wsData[i] = struct{ Title, Type, Content string }{s.Title, s.Type, s.Content}
+	}
+
+	sys := llm.CombineSystem
+	if uc := sh.conductor.UserContext(); uc != "" {
+		sys += "\n\nUser context: " + uc
+	}
+	msgs := llm.BuildCombineMessages(sys, message, wsData)
+	combined, err := llm.Stream(ctx, msgs, llm.ModelFor("document"), 0.5, onToken)
+	if err != nil {
+		return nil, err
+	}
+
+	titles := make([]string, len(sources))
+	for i, s := range sources {
+		titles[i] = s.Title
+	}
+	title := "Combined: " + strings.Join(titles, " + ")
+	if len(title) > 64 {
+		title = title[:61] + "..."
+	}
+
+	ws, err := sh.workspaces.Create(newID(), "document", title, combined, sess.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	reply := fmt.Sprintf("Combined %d workspaces into %q.", len(sources), ws.Title)
+	return &StreamResponse{ChatReply: reply, Workspace: ws, Intent: intent.KindCombine}, nil
+}
+
+// crossWorkspaceRefs finds workspaces referenced in the message other than the target.
+// Used to include additional context in edit prompts.
+func crossWorkspaceRefs(message string, active []*workspace.Workspace, target *workspace.Workspace) []*workspace.Workspace {
+	if len(active) < 2 {
+		return nil
+	}
+	msg := strings.ToLower(message)
+	var refs []*workspace.Workspace
+	for _, ws := range active {
+		if ws.ID == target.ID {
+			continue
+		}
+		if titleMatchScore(msg, ws.Title) > 0 {
+			refs = append(refs, ws)
+		}
+	}
+	return refs
+}
 
 // ── Helpers ───────────────────────────────────────────────────────
 
