@@ -68,6 +68,7 @@ Every message is classified before any model is invoked:
 "close the workspace"            → close active tab
 "run it"                         → execute active code workspace
 "test this"                      → execute active code workspace
+"combine the proposal and checklist" → merge workspaces into new document
 ```
 
 Pure regex, sub-millisecond. Self-edit phrases are checked before edit patterns so "edit it directly" never triggers an unwanted LLM call.
@@ -126,6 +127,19 @@ end)
 Type `standup` in the chat and the plugin runs — no LLM call, sub-millisecond.
 
 The Lua VM is sandboxed: no file I/O, no `os.execute`, no network. Plugins interact with CAS through a controlled API: `cas.command()`, `cas.reply()`, `cas.workspaces()`, `cas.active()`.
+
+### Cross-workspace operations
+
+With multiple workspaces open, CAS resolves which one you're addressing by fuzzy-matching title fragments:
+
+```
+"update the proposal"            → targets "Project Proposal", not the most recent tab
+"add the script code to the report" → edits "Report" with "Script" content as context
+"combine the proposal and checklist" → creates a new workspace from both sources
+"merge all workspaces"           → synthesizes everything into one document
+```
+
+Edits that reference another workspace by name automatically include that workspace's content in the LLM prompt — the model can see both documents when making changes.
 
 ### Behavioral learning
 
@@ -212,7 +226,7 @@ tests/tui/       TUI integration tests (spawn real binary via tmux)
 cmd/cas/         Entry point: --db, --memory flags
 ```
 
-**216 tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
+**245 tests** across all packages. **8 TUI integration tests** that spawn the real binary in tmux and interact with it as a user would — catching runtime bugs that unit tests miss.
 
 ---
 
