@@ -229,3 +229,138 @@ func TestStreamMessageIntegration(t *testing.T) {
 		t.Error("expected non-empty ChatReply")
 	}
 }
+
+
+// ── Run workspace ─────────────────────────────────────────────────
+
+func TestRunNoActiveWorkspace(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindRun {
+		t.Errorf("expected KindRun, got %q", resp.Intent)
+	}
+	if resp.ChatReply == "" {
+		t.Error("expected non-empty reply explaining no workspace")
+	}
+}
+
+func TestRunNonCodeWorkspace(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	// Create a document workspace (not code)
+	_, err := sh.Workspaces().Create("ws1", "document", "My Doc", "# Hello", sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindRun {
+		t.Errorf("expected KindRun, got %q", resp.Intent)
+	}
+	if resp.ChatReply == "" || resp.Workspace == nil {
+		t.Error("expected reply explaining cannot run document workspace")
+	}
+}
+
+func TestRunEmptyCodeWorkspace(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	_, err := sh.Workspaces().Create("ws1", "code", "Empty Script", "", sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindRun {
+		t.Errorf("expected KindRun, got %q", resp.Intent)
+	}
+	if resp.ChatReply == "" {
+		t.Error("expected reply explaining workspace is empty")
+	}
+}
+
+func TestRunBashWorkspace(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	code := "#!/bin/bash\necho hello from cas"
+	_, err := sh.Workspaces().Create("ws1", "code", "Hello Script", code, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Intent != intent.KindRun {
+		t.Errorf("expected KindRun, got %q", resp.Intent)
+	}
+	if resp.Workspace == nil {
+		t.Fatal("expected workspace in response")
+	}
+	if resp.Workspace.ID != "ws1" {
+		t.Errorf("expected workspace ws1, got %q", resp.Workspace.ID)
+	}
+	// Check that output contains the echo'd text
+	if !contains(resp.ChatReply, "hello from cas") {
+		t.Errorf("expected 'hello from cas' in output, got %q", resp.ChatReply)
+	}
+}
+
+func TestRunExitNonZero(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	code := "#!/bin/bash\necho fail >&2\nexit 1"
+	_, err := sh.Workspaces().Create("ws1", "code", "Fail Script", code, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(resp.ChatReply, "exit 1") {
+		t.Errorf("expected 'exit 1' in output, got %q", resp.ChatReply)
+	}
+	if !contains(resp.ChatReply, "fail") {
+		t.Errorf("expected 'fail' in stderr output, got %q", resp.ChatReply)
+	}
+}
+
+func TestRunUndetectableLanguage(t *testing.T) {
+	sh, _ := newShell(t)
+	sess, _ := sh.CreateSession()
+	code := "some random text that is not code"
+	_, err := sh.Workspaces().Create("ws1", "code", "Unknown", code, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := sh.ProcessMessage(context.Background(), sess.ID, "run it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should not error, but should explain the failure
+	if !contains(resp.ChatReply, "detect language") {
+		t.Errorf("expected language detection error in reply, got %q", resp.ChatReply)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && containsLower(s, substr)
+}
+
+func containsLower(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

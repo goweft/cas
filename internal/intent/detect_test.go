@@ -139,3 +139,69 @@ func TestTitleHintAbsentForNonCreate(t *testing.T) {
 		}
 	}
 }
+
+
+// ── Run intent tests ──────────────────────────────────────────────
+
+func TestRunIntent(t *testing.T) {
+	cases := []struct {
+		message string
+		want    intent.Kind
+	}{
+		{"run", intent.KindRun},
+		{"run it", intent.KindRun},
+		{"run this", intent.KindRun},
+		{"run that", intent.KindRun},
+		{"execute", intent.KindRun},
+		{"execute it", intent.KindRun},
+		{"run the script", intent.KindRun},
+		{"run the code", intent.KindRun},
+		{"execute the program", intent.KindRun},
+		{"test it", intent.KindRun},
+		{"test this", intent.KindRun},
+		{"try it", intent.KindRun},
+		{"try running it", intent.KindRun},
+		{"go run", intent.KindRun},
+		{"can you run it", intent.KindRun},
+		{"can you run the script", intent.KindRun},
+		{"please run it", intent.KindRun},
+		{"run and show me the output", intent.KindRun},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != tc.want {
+				t.Errorf("Detect(%q) = %q, want %q", tc.message, got.Kind, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunIntentDoesNotMatchConversational(t *testing.T) {
+	// These should NOT be detected as run intent
+	cases := []struct {
+		message string
+		want    intent.Kind
+	}{
+		{"how do I run this on my server?", intent.KindChat},
+		{"can you write a script to run the tests?", intent.KindCreate},
+		{"I need to run some errands", intent.KindChat},
+		{"the program won't run on Windows", intent.KindChat},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != tc.want {
+				t.Errorf("Detect(%q) = %q, want %q", tc.message, got.Kind, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunBeforeSelfEdit(t *testing.T) {
+	// "run it" should match run, not fall through to anything else
+	got := intent.Detect("run it")
+	if got.Kind != intent.KindRun {
+		t.Errorf("expected KindRun for 'run it', got %q", got.Kind)
+	}
+}

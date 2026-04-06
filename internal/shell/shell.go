@@ -15,6 +15,7 @@ import (
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/store"
+	"github.com/goweft/cas/internal/runner"
 	"github.com/goweft/cas/internal/workspace"
 )
 
@@ -166,6 +167,8 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		resp, err = sh.handleEdit(ctx, sess, message)
 	case intent.KindClose:
 		resp, err = sh.handleClose(sess)
+	case intent.KindRun:
+		resp, err = sh.handleRun(ctx, sess)
 	default:
 		resp, err = sh.handleChat(ctx, sess, message)
 	}
@@ -209,6 +212,12 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 		resp, err = sh.streamEdit(ctx, sess, message, onToken)
 	case intent.KindClose:
 		r, e := sh.handleClose(sess)
+		if e != nil {
+			return nil, e
+		}
+		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
+	case intent.KindRun:
+		r, e := sh.handleRun(ctx, sess)
 		if e != nil {
 			return nil, e
 		}
@@ -345,6 +354,43 @@ func (sh *Shell) streamChat(ctx context.Context, sess *Session, message string, 
 		reply = `To create a workspace, say: "write a [document type]".`
 	}
 	return &StreamResponse{ChatReply: reply, Intent: intent.KindChat}, nil
+}
+
+func (sh *Shell) handleRun(ctx context.Context, sess *Session) (*Response, error) {
+	active := sh.workspaces.Active()
+	if len(active) == 0 {
+		return &Response{ChatReply: "No active workspace to run. Create a code workspace first.", Intent: intent.KindRun}, nil
+	}
+	ws := active[len(active)-1]
+	if ws.Type != "code" {
+		return &Response{
+			ChatReply: fmt.Sprintf("Cannot run a %s workspace. Only code workspaces can be executed.", ws.Type),
+			Workspace: ws,
+			Intent:    intent.KindRun,
+		}, nil
+	}
+	if strings.TrimSpace(ws.Content) == "" {
+		return &Response{
+			ChatReply: "Workspace is empty — nothing to run.",
+			Workspace: ws,
+			Intent:    intent.KindRun,
+		}, nil
+	}
+
+	result, err := runner.Run(ctx, ws.Content, runner.DefaultTimeout)
+	if err != nil {
+		return &Response{
+			ChatReply: fmt.Sprintf("Run failed: %v", err),
+			Workspace: ws,
+			Intent:    intent.KindRun,
+		}, nil
+	}
+
+	return &Response{
+		ChatReply: runner.FormatResult(result),
+		Workspace: ws,
+		Intent:    intent.KindRun,
+	}, nil
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

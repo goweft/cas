@@ -3,10 +3,11 @@
 //
 // Priority order (must be preserved):
 //  1. Close patterns
-//  2. Self-edit exclusions — user signals they will edit manually → chat
-//  3. Edit patterns
-//  4. Create patterns
-//  5. Chat (default)
+//  2. Run patterns — execute active code workspace
+//  3. Self-edit exclusions — user signals they will edit manually → chat
+//  4. Edit patterns
+//  5. Create patterns
+//  6. Chat (default)
 package intent
 
 import "regexp"
@@ -18,6 +19,7 @@ const (
 	KindCreate Kind = "create_workspace"
 	KindEdit   Kind = "edit_workspace"
 	KindClose  Kind = "close_workspace"
+	KindRun    Kind = "run_workspace"
 	KindChat   Kind = "chat"
 )
 
@@ -62,6 +64,7 @@ var createPatterns []createPattern
 var editPatterns []*regexp.Regexp
 var selfEditPatterns []*regexp.Regexp
 var closePatterns []*regexp.Regexp
+var runPatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
 
 func init() {
@@ -101,6 +104,21 @@ func init() {
 		ci(`(?i)\b(?:workspace|document|doc|editor|file)\b.*\b(?:close|done|finish|discard|dismiss)\b`),
 	}
 
+	// Checked after close but before self-edit and edit patterns.
+	// Short, imperative phrases that mean "execute the active code".
+	runPatterns = []*regexp.Regexp{
+		ci(`(?i)^run\s*(it|this|that)?\.?$`),                                        // "run", "run it", "run this"
+		ci(`(?i)^execute\s*(it|this|that)?\.?$`),                                     // "execute", "execute it"
+		ci(`(?i)^run\s+(the\s+)?(script|code|program|file)\.?$`),                     // "run the script"
+		ci(`(?i)^execute\s+(the\s+)?(script|code|program|file)\.?$`),                 // "execute the code"
+		ci(`(?i)^test\s+(it|this|that)\.?$`),                                         // "test it", "test this"
+		ci(`(?i)^try\s+(it|this|that|running\s+it)\.?$`),                             // "try it", "try running it"
+		ci(`(?i)^go\s+run\.?$`),                                                      // "go run"
+		ci(`(?i)^can\s+you\s+run\s+(it|this|that|the\s+(?:script|code|program))\.?$`), // "can you run it"
+		ci(`(?i)^please\s+run\s+(it|this|that)?\.?$`),                                // "please run it"
+		ci(`(?i)^run\s+and\s+show\s+(me\s+)?(the\s+)?output\.?$`),                   // "run and show me the output"
+	}
+
 	titleHintRe = regexp.MustCompile(
 		`(?i)\b(?:write|draft|create|make|start|begin|compose)\s+(?:me\s+)?(?:a|an|the|my|our)?\s*(.+)`,
 	)
@@ -112,6 +130,11 @@ func Detect(message string) Intent {
 	for _, re := range closePatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindClose, WSType: WSDocument}
+		}
+	}
+	for _, re := range runPatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindRun, WSType: WSCode}
 		}
 	}
 	for _, re := range selfEditPatterns {
