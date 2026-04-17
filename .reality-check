@@ -1,0 +1,3 @@
+TEST_CMD="go test ./... -race -cover"
+CODE_GLOB="*.go"
+KEY_DIRS="internal cmd ui tests"
