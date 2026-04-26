@@ -1,6 +1,6 @@
 # App Ingestion
 
-**Status:** Concept. Not on roadmap. Depends on Phase 2 sub-agent decomposition.
+**Status:** Concept. Depends on sub-agent decomposition (planned, not yet designed).
 
 ---
 
@@ -88,8 +88,8 @@ the main loop.
 
 ### 3. Sub-agent binding
 
-Each ingested workspace gets its own sub-agent from the Phase 2 decomposition
-work. That sub-agent carries a **scoped contract**:
+Each ingested workspace gets its own sub-agent from the planned
+decomposition work. That sub-agent carries a **scoped contract**:
 
 - It can only invoke operations on its own workspace.
 - Its memory reads are scoped to that workspace plus whatever the user has
@@ -129,7 +129,7 @@ retrieved for a personal banking form — even though both fields are literally
 
 | Mode        | Feasibility          | Blockers                                   |
 |-------------|----------------------|--------------------------------------------|
-| **API**     | Buildable today      | Phase 2 sub-agents, Workspace abstraction  |
+| **API**     | Buildable today      | Sub-agent decomposition, Workspace surface |
 | **WebView** | Buildable after API  | Embedded browser runtime choice            |
 | **Native**  | Research-phase       | Platform window adoption (X11/Wayland/AX)  |
 
@@ -148,7 +148,7 @@ embedded WebView the shell controls, and get authoritative DOM access — no
 vision fallback needed. This covers a large fraction of real-world apps and
 should be the second milestone after API mode.
 
-**Native app mode** is Phase 3c research. Window adoption is platform-specific:
+**Native app mode** is research-phase. Window adoption is platform-specific:
 X11 embedding, Wayland's lack of a clean story here, macOS AX API, Windows
 UIA. Pick one platform first (likely X11/Wayland given the Linux dev
 environment) and treat the others as follow-on.
@@ -169,35 +169,38 @@ Pick a real target — Linear, GitHub, or one of the internal Heddle services �
 and show end-to-end that *"drag it in, talk to it, it acts inside its
 contract"* works.
 
-Scope estimate: roughly a week **after** Phase 2 sub-agents exist, because
-sub-agent binding is the load-bearing piece.
+Scope estimate: roughly a week **after** sub-agent decomposition lands,
+because sub-agent binding is the load-bearing piece.
 
 ---
 
 ## Dependency chain
 
 ```
-Phase 1 (current) ─── remote architecture, SessionStore/ExecutionContext,
-                      stability
+Current state ─────── code exec, Lua plugins, cross-workspace ops shipped.
+                      SQLite persistence. Streaming TUI. Stable feature set.
 
-Phase 2 ──────────── sub-agent decomposition with Heddle contracts
+Prerequisite ──────── sub-agent decomposition with Heddle contracts.
+                      Not yet designed in detail. Load-bearing for what
+                      follows — every ingested workspace binds a sub-agent.
 
-Phase 3a ─────────── API-mode ingestion
-                      · Workspace abstraction (surface + state + sub-agent)
+Step 1 ────────────── API-mode ingestion
+                      · Workspace surface (operations + state + sub-agent)
                       · Autonomy dial
                       · Scoped memory with intent tags
 
-Phase 3b ─────────── WebView-mode ingestion
+Step 2 ────────────── WebView-mode ingestion
                       · Embedded browser runtime
                       · Authoritative DOM access
 
-Phase 3c ─────────── Native app window adoption
+Step 3 ────────────── Native app window adoption
                       · Platform-specific (research-heavy)
 ```
 
-Nothing in this chain contradicts the existing roadmap. App Ingestion extends
-cleanly off the sub-agent work and reuses the contract layer that already
-exists.
+App Ingestion reuses the contract layer that already exists and extends off
+the sub-agent work whenever that lands. Numbering is sequencing, not
+committed planning — Step 1 is the smallest meaningful slice; Steps 2 and 3
+are progressively more ambitious.
 
 ---
 
@@ -225,11 +228,11 @@ exists.
 
 ## Why this is worth writing down now
 
-App Ingestion is post-Phase-2 work. Writing it down now does two things:
+App Ingestion sits after the sub-agent decomposition work. Writing it down now does two things:
 
-1. **Forces Phase 2 decisions to be compatible with it.** Sub-agent
-   decomposition done with no thought of ingestion will likely bake in
-   assumptions that make 3a harder.
+1. **Forces sub-agent decomposition decisions to be compatible with it.**
+   Sub-agent work done without ingestion in mind will likely bake in
+   assumptions that make Step 1 harder.
 2. **Differentiates CAS from the 2026 computer-use wave.** Generic
    computer-use agents that drive a shared desktop are going to flood the
    space. *App comes to the shell* is a genuinely different shape, and
