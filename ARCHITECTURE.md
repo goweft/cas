@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `682c886`
+**Verified against:** commit `6b4ef8d`
 
 ---
 
@@ -26,9 +26,10 @@ cmd/cas/main.go          Entry point. Wires store → shell → TUI and starts
 internal/
   intent/     detect.go  Zero-latency regex classifier. Fires before any LLM
                          call. Maps a user message to a Kind and workspace type.
-  agent/      agent.go    Named sub-agents with per-agent contracts. Three agents:
-                         GenerationAgent (create), EditAgent (edit), CombineAgent (combine).
-                         Shell delegates to agents; agents own all workspace LLM calls.
+  agent/      agent.go    Named sub-agents with per-agent contracts. Four agents:
+                         GenerationAgent (create), EditAgent (edit), CombineAgent (combine),
+                         ChatAgent (chat). Shell delegates to agents; agents own every LLM call.
+                         Shell has no remaining LLM call sites — it only routes.
   contract/   contract.go  Design by Contract enforcement. Pre/post/invariant
                          checks on workspace operations. Fail-closed.
   workspace/  workspace.go  Workspace type and lifecycle (create, update, close,
@@ -39,7 +40,7 @@ internal/
                          and context-aware edit.
   llm/        llm.go     Multi-provider LLM bridge. Streaming and non-streaming.
                          Provider: CAS_PROVIDER env (ollama | anthropic | groq | openai | openrouter).
-                         Called exclusively by agents and shell.handleChat.
+                         Called exclusively by agents. The shell has no remaining LLM call sites.
   store/      store.go   Store interface (SessionStore).
               sqlite.go  SQLiteStore — production persistence at ~/.cas/cas.db.
               memory.go  MemoryStore — in-memory, used in tests.
@@ -89,7 +90,11 @@ intent.Detect()               ← regex only, no LLM call, no latency
      │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB
      │                   workspace.Create()
      │
-     └─ KindChat    →  llm.Stream() → chat reply (no agent, no workspace op)
+     └─ KindChat    →  ChatAgent
+                         contract.CheckPreconditions()   ← message non-empty, history ≤ 20 turns
+                         llm.Stream()
+                         contract.CheckPostconditions()  ← reply guaranteed (fallback on empty)
+                         → chat reply
                               │
                               ▼
                        conductor.Observe()   ← updates ~/.cas/profile.json
@@ -123,14 +128,19 @@ frozen before the LLM call and cannot be modified by the agent or the model.
 
 Per-agent contract rules:
 
-| Agent             | Preconditions                              | Postconditions                              |
-|-------------------|--------------------------------------------|---------------------------------------------|
-| GenerationAgent   | wsType valid, prompt non-empty, title non-empty | content non-empty, ≤ 512 KB            |
-| EditAgent         | wsType valid, content non-empty, request non-empty | result non-empty, ≤ 512 KB, ≥ 10% of original |
-| CombineAgent      | ≥ 2 sources, all sources non-empty        | result non-empty, ≤ 512 KB                  |
+| Agent             | Preconditions                                      | Postconditions                                        |
+|-------------------|----------------------------------------------------|-------------------------------------------------------|
+| GenerationAgent   | wsType valid, prompt non-empty, title non-empty    | content non-empty, ≤ 512 KB                           |
+| EditAgent         | wsType valid, content non-empty, request non-empty | result non-empty, ≤ 512 KB, ≥ 10% of original        |
+| CombineAgent      | ≥ 2 sources, all sources non-empty                 | result non-empty, ≤ 512 KB                            |
+| ChatAgent         | message non-empty, history ≤ 20 turns              | reply guaranteed (fallback applied before check)      |
 
 The 10% truncation guard on EditAgent catches cases where the model returns
 only a fragment of the updated document instead of the full content.
+
+ChatAgent's postcondition is a guarantee rather than a hard check — if the
+model returns an empty reply, the fallback nudge is substituted before the
+postcondition runs, ensuring the contract is always satisfied.
 
 ---
 
