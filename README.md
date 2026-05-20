@@ -83,7 +83,7 @@ contract.CheckInvariants()      // are all invariants satisfied?
 contract.CheckPostconditions()  // did the output meet requirements?
 ```
 
-Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1986).
+Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1988).
 
 ### Three workspace types
 
