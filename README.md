@@ -85,6 +85,8 @@ contract.CheckPostconditions()  // did the output meet requirements?
 
 Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1988).
 
+Each workspace operation is owned by a named agent (`GenerationAgent`, `EditAgent`, `CombineAgent`). Contracts are frozen before the LLM call and checked again after. The shell delegates to agents; agents never call each other.
+
 ### Three workspace types
 
 | Type | Badge | Model (Ollama) | Model (Anthropic) | Model (Groq) | Model (OpenAI) | Model (OpenRouter) |
@@ -213,6 +215,8 @@ Full terminal editor via `charmbracelet/bubbles` textarea. All standard cursor m
 ```
 internal/
 ├── intent/      Zero-latency intent detection — regex, no LLM call
+├── agent/       Named sub-agents: GenerationAgent, EditAgent, CombineAgent
+│                Each owns one category of LLM call with a frozen contract
 ├── contract/    Design by Contract enforcement, fail-closed
 ├── workspace/   Lifecycle: create, update, undo, close, restore
 ├── shell/       Session manager: ProcessMessage, StreamMessage

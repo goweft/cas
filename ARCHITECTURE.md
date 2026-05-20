@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `1863de0`
+**Verified against:** commit `682c886`
 
 ---
 
@@ -26,6 +26,9 @@ cmd/cas/main.go          Entry point. Wires store → shell → TUI and starts
 internal/
   intent/     detect.go  Zero-latency regex classifier. Fires before any LLM
                          call. Maps a user message to a Kind and workspace type.
+  agent/      agent.go    Named sub-agents with per-agent contracts. Three agents:
+                         GenerationAgent (create), EditAgent (edit), CombineAgent (combine).
+                         Shell delegates to agents; agents own all workspace LLM calls.
   contract/   contract.go  Design by Contract enforcement. Pre/post/invariant
                          checks on workspace operations. Fail-closed.
   workspace/  workspace.go  Workspace type and lifecycle (create, update, close,
@@ -36,6 +39,7 @@ internal/
                          and context-aware edit.
   llm/        llm.go     Multi-provider LLM bridge. Streaming and non-streaming.
                          Provider: CAS_PROVIDER env (ollama | anthropic | groq | openai | openrouter).
+                         Called exclusively by agents and shell.handleChat.
   store/      store.go   Store interface (SessionStore).
               sqlite.go  SQLiteStore — production persistence at ~/.cas/cas.db.
               memory.go  MemoryStore — in-memory, used in tests.
@@ -62,14 +66,30 @@ tests/tui/               TUI integration tests. Spawn the real binary in tmux
 User message
      │
      ▼
-intent.Detect()          ← regex only, no LLM call, no latency
+intent.Detect()               ← regex only, no LLM call, no latency
      │
      ├─ KindClose   →  workspace.Manager.Close()
      ├─ KindRun     →  runner.Run(workspace.Content)
-     ├─ KindCombine →  shell.handleCombine() + resolve.resolveAll()
-     ├─ KindEdit    →  contract check → llm.Stream() → workspace.Update()
-     ├─ KindCreate  →  contract check → llm.Stream() → workspace.Create()
-     └─ KindChat    →  llm.Stream() → chat reply
+     │
+     ├─ KindCreate  →  GenerationAgent
+     │                   contract.CheckPreconditions()   ← wsType, prompt, title
+     │                   llm.Stream()
+     │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB
+     │                   workspace.Create()
+     │
+     ├─ KindEdit    →  EditAgent
+     │                   contract.CheckPreconditions()   ← wsType, content, request
+     │                   llm.Stream()
+     │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB, ≥10% original
+     │                   workspace.Update()
+     │
+     ├─ KindCombine →  CombineAgent
+     │                   contract.CheckPreconditions()   ← ≥2 sources, all non-empty
+     │                   llm.Stream()
+     │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB
+     │                   workspace.Create()
+     │
+     └─ KindChat    →  llm.Stream() → chat reply (no agent, no workspace op)
                               │
                               ▼
                        conductor.Observe()   ← updates ~/.cas/profile.json
@@ -85,21 +105,32 @@ registered plugin prefix, the plugin handler fires and the flow short-circuits.
 
 ## Design by Contract
 
-The contract package implements Bertrand Meyer's Design by Contract as the
-security primitive for workspace operations.
+The contract package implements Bertrand Meyer's Design by Contract (1988) as
+the security primitive for workspace operations.
 
 Contracts are constructed and frozen before any LLM call. The model cannot
 see, modify, or reason about them. Violations are always fatal to the
 operation — no fallback, no retry, no LLM-assisted recovery. The three phases:
 
-- **Preconditions** — checked before the operation starts (e.g. workspace type
-  is allowed)
-- **Postconditions** — checked after the operation completes (e.g. content size
-  within limit)
+- **Preconditions** — checked before the LLM call (e.g. workspace type allowed,
+  prompt non-empty)
+- **Postconditions** — checked after the LLM call (e.g. content non-empty, size
+  within limit, edit result not drastically shorter than original)
 - **Invariants** — structural rules that must always hold
 
-`DefaultWorkspaceContract` is applied to all create/update operations.
-Callers extend it with operation-specific rules before freezing.
+Each agent constructs its own contract from `contract.New()`. The contract is
+frozen before the LLM call and cannot be modified by the agent or the model.
+
+Per-agent contract rules:
+
+| Agent             | Preconditions                              | Postconditions                              |
+|-------------------|--------------------------------------------|---------------------------------------------|
+| GenerationAgent   | wsType valid, prompt non-empty, title non-empty | content non-empty, ≤ 512 KB            |
+| EditAgent         | wsType valid, content non-empty, request non-empty | result non-empty, ≤ 512 KB, ≥ 10% of original |
+| CombineAgent      | ≥ 2 sources, all sources non-empty        | result non-empty, ≤ 512 KB                  |
+
+The 10% truncation guard on EditAgent catches cases where the model returns
+only a fragment of the updated document instead of the full content.
 
 ---
 
