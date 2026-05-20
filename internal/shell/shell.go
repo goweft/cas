@@ -70,6 +70,7 @@ type Shell struct {
 	genAgent   *agent.GenerationAgent
 	editAgent  *agent.EditAgent
 	combAgent  *agent.CombineAgent
+	chatAgent  *agent.ChatAgent
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -88,6 +89,7 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 		genAgent:   agent.NewGenerationAgent(),
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
+		chatAgent:  agent.NewChatAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -105,6 +107,7 @@ func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell 
 		genAgent:   agent.NewGenerationAgent(),
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
+		chatAgent:  agent.NewChatAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -417,27 +420,29 @@ func (sh *Shell) handleClose(sess *Session) (*Response, error) {
 }
 
 func (sh *Shell) handleChat(ctx context.Context, sess *Session, message string) (*Response, error) {
-	msgs := llm.BuildChatMessages(llm.ChatSystem+contextSuffix(sh.conductor.UserContext()), sessionHistory(sess), message)
-	reply, err := llm.Complete(ctx, msgs, llm.ModelFor("chat"), 0.7)
+	result, err := sh.chatAgent.Chat(ctx, agent.ChatRequest{
+		Message:     message,
+		History:     sessionHistory(sess),
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.7,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if reply == "" {
-		reply = `To create a workspace, say: "write a [document type]".`
-	}
-	return &Response{ChatReply: reply, Intent: intent.KindChat}, nil
+	return &Response{ChatReply: result.Reply, Intent: intent.KindChat}, nil
 }
 
 func (sh *Shell) streamChat(ctx context.Context, sess *Session, message string, onToken func(string)) (*StreamResponse, error) {
-	msgs := llm.BuildChatMessages(llm.ChatSystem+contextSuffix(sh.conductor.UserContext()), sessionHistory(sess), message)
-	reply, err := llm.Stream(ctx, msgs, llm.ModelFor("chat"), 0.7, onToken)
+	result, err := sh.chatAgent.Stream(ctx, agent.ChatRequest{
+		Message:     message,
+		History:     sessionHistory(sess),
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.7,
+	}, onToken)
 	if err != nil {
 		return nil, err
 	}
-	if reply == "" {
-		reply = `To create a workspace, say: "write a [document type]".`
-	}
-	return &StreamResponse{ChatReply: reply, Intent: intent.KindChat}, nil
+	return &StreamResponse{ChatReply: result.Reply, Intent: intent.KindChat}, nil
 }
 
 func (sh *Shell) handleRun(ctx context.Context, sess *Session) (*Response, error) {
@@ -672,9 +677,4 @@ func titleOrDefault(hint string) string {
 	return hint
 }
 
-func contextSuffix(ctx string) string {
-	if ctx == "" {
-		return ""
-	}
-	return "\n\nUser context: " + ctx
-}
+

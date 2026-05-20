@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/goweft/cas/internal/agent"
+	"github.com/goweft/cas/internal/llm"
 )
 
 // ── GenerationAgent ───────────────────────────────────────────────
@@ -181,6 +182,51 @@ func TestCombineAgentValidPreconditions(t *testing.T) {
 			{Title: "Two", Type: "document", Content: "content two"},
 		},
 		Instruction: "combine them",
+	})
+	if err != nil && strings.Contains(err.Error(), "contract violation") {
+		t.Errorf("valid request should pass preconditions, got: %v", err)
+	}
+}
+
+// ── ChatAgent ─────────────────────────────────────────────────────
+
+func TestChatAgentContractEmptyMessage(t *testing.T) {
+	a := agent.NewChatAgent()
+	_, err := a.Chat(context.Background(), agent.ChatRequest{
+		Message: "   ",
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for empty message, got nil")
+	}
+	if !strings.Contains(err.Error(), "message_not_empty") {
+		t.Errorf("expected message_not_empty violation, got: %v", err)
+	}
+}
+
+func TestChatAgentContractExcessiveHistory(t *testing.T) {
+	a := agent.NewChatAgent()
+	history := make([]llm.Message, 21)
+	for i := range history {
+		history[i] = llm.Message{Role: "user", Content: "msg"}
+	}
+	_, err := a.Chat(context.Background(), agent.ChatRequest{
+		Message: "hello",
+		History: history,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for excessive history, got nil")
+	}
+	if !strings.Contains(err.Error(), "history_not_excessive") {
+		t.Errorf("expected history_not_excessive violation, got: %v", err)
+	}
+}
+
+func TestChatAgentValidPreconditions(t *testing.T) {
+	t.Skip("skipped: requires live LLM endpoint")
+	a := agent.NewChatAgent()
+	_, err := a.Chat(context.Background(), agent.ChatRequest{
+		Message:     "hello",
+		Temperature: 0.7,
 	})
 	if err != nil && strings.Contains(err.Error(), "contract violation") {
 		t.Errorf("valid request should pass preconditions, got: %v", err)

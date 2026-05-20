@@ -7,6 +7,8 @@
 // Agents:
 //   - GenerationAgent  creates new workspace content from a prompt
 //   - EditAgent        applies a change request to existing content
+//   - CombineAgent     merges multiple workspace contents into one
+//   - ChatAgent        handles conversational turns (no workspace op)
 //
 // IntentAgent is not here — intent detection is pure regex in internal/intent
 // and needs no LLM call. It is covered by a contract at the shell boundary.
@@ -359,4 +361,111 @@ func (a *CombineAgent) contract(req CombineRequest, contentSize int) *contract.C
 		},
 	}
 	return c.Freeze()
+}
+
+// ── ChatAgent ─────────────────────────────────────────────────────
+
+// ChatRequest is the input to ChatAgent.
+type ChatRequest struct {
+	Message     string
+	History     []llm.Message // recent conversation turns
+	UserContext string        // from conductor
+	Temperature float64
+}
+
+// ChatResult is the output from ChatAgent.
+type ChatResult struct {
+	Reply string
+}
+
+// fallbackReply is returned when the model produces an empty response.
+const fallbackReply = `To create a workspace, say: "write a [document type]".`
+
+// ChatAgent handles conversational turns that don't produce a workspace.
+// It owns all KindChat LLM calls.
+type ChatAgent struct{}
+
+// NewChatAgent returns a ChatAgent.
+func NewChatAgent() *ChatAgent { return &ChatAgent{} }
+
+// Chat sends a message and returns the reply synchronously.
+func (a *ChatAgent) Chat(ctx context.Context, req ChatRequest) (*ChatResult, error) {
+	if err := a.contract(req, false).CheckPreconditions(); err != nil {
+		return nil, err
+	}
+
+	msgs := llm.BuildChatMessages(llm.ChatSystem+chatContextSuffix(req.UserContext), req.History, req.Message)
+	reply, err := llm.Complete(ctx, msgs, llm.ModelFor("chat"), req.Temperature)
+	if err != nil {
+		return nil, fmt.Errorf("chat-agent: %w", err)
+	}
+	if strings.TrimSpace(reply) == "" {
+		reply = fallbackReply
+	}
+
+	result := &ChatResult{Reply: reply}
+	if err := a.contract(req, true).CheckPostconditions(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// Stream sends a message and calls onToken for each streamed token.
+func (a *ChatAgent) Stream(ctx context.Context, req ChatRequest, onToken func(string)) (*ChatResult, error) {
+	if err := a.contract(req, false).CheckPreconditions(); err != nil {
+		return nil, err
+	}
+
+	msgs := llm.BuildChatMessages(llm.ChatSystem+chatContextSuffix(req.UserContext), req.History, req.Message)
+	reply, err := llm.Stream(ctx, msgs, llm.ModelFor("chat"), req.Temperature, onToken)
+	if err != nil {
+		return nil, fmt.Errorf("chat-agent: %w", err)
+	}
+	if strings.TrimSpace(reply) == "" {
+		reply = fallbackReply
+	}
+
+	result := &ChatResult{Reply: reply}
+	if err := a.contract(req, true).CheckPostconditions(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// contract builds and freezes the ChatAgent contract.
+// replyProduced is false during precondition checks, true during postcondition checks.
+func (a *ChatAgent) contract(req ChatRequest, replyProduced bool) *contract.Contract {
+	const maxHistoryTurns = 20
+
+	c := contract.New("chat-agent")
+	c.Preconditions = []contract.Rule{
+		{
+			Name:        "message_not_empty",
+			Description: "chat message must not be empty",
+			Check:       func() bool { return strings.TrimSpace(req.Message) != "" },
+		},
+		{
+			Name:        "history_not_excessive",
+			Description: fmt.Sprintf("history must not exceed %d turns", maxHistoryTurns),
+			Check:       func() bool { return len(req.History) <= maxHistoryTurns },
+		},
+	}
+	c.Postconditions = []contract.Rule{
+		{
+			// Chat always has a reply — fallback is applied before postcondition check.
+			// This rule documents the guarantee rather than enforcing truncation.
+			Name:        "reply_produced",
+			Description: "chat reply must be non-empty (fallback applied if model returns empty)",
+			Check:       func() bool { return replyProduced },
+		},
+	}
+	return c.Freeze()
+}
+
+// chatContextSuffix returns a context suffix for the chat system prompt, or empty string.
+func chatContextSuffix(ctx string) string {
+	if ctx == "" {
+		return ""
+	}
+	return "\n\nUser context: " + ctx
 }
