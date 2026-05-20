@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goweft/cas/internal/agent"
 	"github.com/goweft/cas/internal/conductor"
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
@@ -66,6 +67,9 @@ type Shell struct {
 	sessions   map[string]*Session
 	conductor  *conductor.Conductor
 	plugins    *plugin.Registry
+	genAgent   *agent.GenerationAgent
+	editAgent  *agent.EditAgent
+	combAgent  *agent.CombineAgent
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -81,6 +85,9 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 		sessions:   make(map[string]*Session),
 		conductor:  conductor.New(path),
 		plugins:    plugin.New(plugin.DefaultDir()),
+		genAgent:   agent.NewGenerationAgent(),
+		editAgent:  agent.NewEditAgent(),
+		combAgent:  agent.NewCombineAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -95,6 +102,9 @@ func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell 
 		sessions:   make(map[string]*Session),
 		conductor:  conductor.New(conductorPath),
 		plugins:    plugin.New(pluginDir),
+		genAgent:   agent.NewGenerationAgent(),
+		editAgent:  agent.NewEditAgent(),
+		combAgent:  agent.NewCombineAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -291,13 +301,17 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 
 func (sh *Shell) handleCreate(ctx context.Context, sess *Session, in intent.Intent, message string) (*Response, error) {
 	title := titleOrDefault(in.TitleHint)
-	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), sh.conductor.UserContext())
-	msgs := llm.BuildWorkspaceMessages(sys, title, message)
-	content, err := llm.Complete(ctx, msgs, llm.ModelFor(string(in.WSType)), 0.6)
+	result, err := sh.genAgent.Generate(ctx, agent.GenerationRequest{
+		WSType:      string(in.WSType),
+		Title:       title,
+		Prompt:      message,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.6,
+	})
 	if err != nil {
 		return nil, err
 	}
-	content = normaliseContent(content, string(in.WSType), title)
+	content := normaliseContent(result.Content, string(in.WSType), title)
 	ws, err := sh.workspaces.Create(newID(), string(in.WSType), title, content, sess.ID)
 	if err != nil {
 		return nil, err
@@ -308,13 +322,17 @@ func (sh *Shell) handleCreate(ctx context.Context, sess *Session, in intent.Inte
 
 func (sh *Shell) streamCreate(ctx context.Context, sess *Session, in intent.Intent, message string, onToken func(string)) (*StreamResponse, error) {
 	title := titleOrDefault(in.TitleHint)
-	sys := llm.SystemFor(llm.WorkspaceSystem, string(in.WSType), sh.conductor.UserContext())
-	msgs := llm.BuildWorkspaceMessages(sys, title, message)
-	content, err := llm.Stream(ctx, msgs, llm.ModelFor(string(in.WSType)), 0.6, onToken)
+	result, err := sh.genAgent.Stream(ctx, agent.GenerationRequest{
+		WSType:      string(in.WSType),
+		Title:       title,
+		Prompt:      message,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.6,
+	}, onToken)
 	if err != nil {
 		return nil, err
 	}
-	content = normaliseContent(content, string(in.WSType), title)
+	content := normaliseContent(result.Content, string(in.WSType), title)
 	ws, err := sh.workspaces.Create(newID(), string(in.WSType), title, content, sess.ID)
 	if err != nil {
 		return nil, err
@@ -329,26 +347,24 @@ func (sh *Shell) handleEdit(ctx context.Context, sess *Session, message string) 
 		return &Response{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
 	ws := resolveTarget(message, active)
-	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
-
-	// Check if the message references other workspaces for cross-workspace context
 	refs := crossWorkspaceRefs(message, active, ws)
-	var msgs []llm.Message
-	if len(refs) > 0 {
-		refData := make([]struct{ Title, Content string }, len(refs))
-		for i, r := range refs {
-			refData[i] = struct{ Title, Content string }{r.Title, r.Content}
-		}
-		msgs = llm.BuildEditWithContextMessages(sys, ws.Title, ws.Content, message, refData)
-	} else {
-		msgs = llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+	refData := make([]struct{ Title, Content string }, len(refs))
+	for i, r := range refs {
+		refData[i] = struct{ Title, Content string }{r.Title, r.Content}
 	}
-
-	content, err := llm.Complete(ctx, msgs, llm.ModelFor(ws.Type), 0.3)
+	result, err := sh.editAgent.Edit(ctx, agent.EditRequest{
+		WSType:         ws.Type,
+		Title:          ws.Title,
+		CurrentContent: ws.Content,
+		EditRequest:    message,
+		UserContext:    sh.conductor.UserContext(),
+		Refs:           refData,
+		Temperature:    0.3,
+	})
 	if err != nil {
 		return nil, err
 	}
-	ws, err = sh.workspaces.Update(ws.ID, ws.Title, content)
+	ws, err = sh.workspaces.Update(ws.ID, ws.Title, result.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -362,25 +378,24 @@ func (sh *Shell) streamEdit(ctx context.Context, sess *Session, message string, 
 		return &StreamResponse{ChatReply: "No active workspace to edit. Ask me to create one first.", Intent: intent.KindEdit}, nil
 	}
 	ws := resolveTarget(message, active)
-	sys := llm.SystemFor(llm.EditSystem, ws.Type, sh.conductor.UserContext())
-
 	refs := crossWorkspaceRefs(message, active, ws)
-	var msgs []llm.Message
-	if len(refs) > 0 {
-		refData := make([]struct{ Title, Content string }, len(refs))
-		for i, r := range refs {
-			refData[i] = struct{ Title, Content string }{r.Title, r.Content}
-		}
-		msgs = llm.BuildEditWithContextMessages(sys, ws.Title, ws.Content, message, refData)
-	} else {
-		msgs = llm.BuildEditMessages(sys, ws.Title, ws.Content, message)
+	refData := make([]struct{ Title, Content string }, len(refs))
+	for i, r := range refs {
+		refData[i] = struct{ Title, Content string }{r.Title, r.Content}
 	}
-
-	content, err := llm.Stream(ctx, msgs, llm.ModelFor(ws.Type), 0.3, onToken)
+	result, err := sh.editAgent.Stream(ctx, agent.EditRequest{
+		WSType:         ws.Type,
+		Title:          ws.Title,
+		CurrentContent: ws.Content,
+		EditRequest:    message,
+		UserContext:    sh.conductor.UserContext(),
+		Refs:           refData,
+		Temperature:    0.3,
+	}, onToken)
 	if err != nil {
 		return nil, err
 	}
-	ws, err = sh.workspaces.Update(ws.ID, ws.Title, content)
+	ws, err = sh.workspaces.Update(ws.ID, ws.Title, result.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -515,12 +530,12 @@ func (sh *Shell) handleCombine(ctx context.Context, sess *Session, message strin
 		wsData[i] = struct{ Title, Type, Content string }{s.Title, s.Type, s.Content}
 	}
 
-	sys := llm.CombineSystem
-	if uc := sh.conductor.UserContext(); uc != "" {
-		sys += "\n\nUser context: " + uc
-	}
-	msgs := llm.BuildCombineMessages(sys, message, wsData)
-	combined, err := llm.Complete(ctx, msgs, llm.ModelFor("document"), 0.5)
+	result, err := sh.combAgent.Combine(ctx, agent.CombineRequest{
+		Sources:     wsData,
+		Instruction: message,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.5,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +549,7 @@ func (sh *Shell) handleCombine(ctx context.Context, sess *Session, message strin
 		title = title[:61] + "..."
 	}
 
-	ws, err := sh.workspaces.Create(newID(), "document", title, combined, sess.ID)
+	ws, err := sh.workspaces.Create(newID(), "document", title, result.Content, sess.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -565,12 +580,12 @@ func (sh *Shell) streamCombine(ctx context.Context, sess *Session, message strin
 		wsData[i] = struct{ Title, Type, Content string }{s.Title, s.Type, s.Content}
 	}
 
-	sys := llm.CombineSystem
-	if uc := sh.conductor.UserContext(); uc != "" {
-		sys += "\n\nUser context: " + uc
-	}
-	msgs := llm.BuildCombineMessages(sys, message, wsData)
-	combined, err := llm.Stream(ctx, msgs, llm.ModelFor("document"), 0.5, onToken)
+	result, err := sh.combAgent.Stream(ctx, agent.CombineRequest{
+		Sources:     wsData,
+		Instruction: message,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.5,
+	}, onToken)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +599,7 @@ func (sh *Shell) streamCombine(ctx context.Context, sess *Session, message strin
 		title = title[:61] + "..."
 	}
 
-	ws, err := sh.workspaces.Create(newID(), "document", title, combined, sess.ID)
+	ws, err := sh.workspaces.Create(newID(), "document", title, result.Content, sess.ID)
 	if err != nil {
 		return nil, err
 	}
