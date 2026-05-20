@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `0ab8230`
+**Verified against:** commit `1863de0`
 
 ---
 
@@ -35,7 +35,7 @@ internal/
               resolve.go Cross-workspace fuzzy title resolution for combine
                          and context-aware edit.
   llm/        llm.go     Multi-provider LLM bridge. Streaming and non-streaming.
-                         Provider: CAS_PROVIDER env (ollama | anthropic).
+                         Provider: CAS_PROVIDER env (ollama | anthropic | groq | openai | openrouter).
   store/      store.go   Store interface (SessionStore).
               sqlite.go  SQLiteStore — production persistence at ~/.cas/cas.db.
               memory.go  MemoryStore — in-memory, used in tests.
@@ -125,16 +125,29 @@ Two concrete implementations: `SQLiteStore` (production) and `MemoryStore`
 
 Provider is selected by `CAS_PROVIDER` environment variable.
 
-| Provider    | Value        | Default models                                    |
-|-------------|--------------|---------------------------------------------------|
-| Ollama      | `ollama`     | `qwen3.5:9b` (doc/list/chat), `qwen2.5-coder:7b` (code) |
-| Anthropic   | `anthropic`  | `claude-sonnet-4-6` (doc/list/chat), `claude-haiku-4-5-20251001` (code) |
-| Groq        | `groq`       | `llama-3.3-70b-versatile` (all types); set `GROQ_API_KEY` |
+| Provider     | Value          | Key env              | Default models                                           |
+|--------------|----------------|----------------------|----------------------------------------------------------|
+| Ollama       | `ollama`       | —                    | `qwen3.5:9b` (doc/list/chat), `qwen2.5-coder:7b` (code) |
+| Anthropic    | `anthropic`    | `ANTHROPIC_API_KEY`  | `claude-sonnet-4-6` (doc/list/chat), `claude-haiku-4-5-20251001` (code) |
+| Groq         | `groq`         | `GROQ_API_KEY`       | `llama-3.3-70b-versatile` (all types)                   |
+| OpenAI       | `openai`       | `OPENAI_API_KEY`     | `gpt-4o` (doc/list/chat), `gpt-4o-mini` (code)         |
+| OpenRouter   | `openrouter`   | `OPENROUTER_API_KEY` | `meta-llama/llama-3.3-70b-instruct` (all types)         |
 
 Model overrides: `CAS_MODEL_{TYPE}` env vars (e.g. `CAS_MODEL_CODE`).
 
-Both providers use streaming. The `llm` package exposes `Stream()` and
-`Complete()` with identical signatures — the provider selection is internal.
+All providers use streaming. The `llm` package exposes `Stream()` and
+`Complete()` with identical signatures — provider selection is internal.
+
+Groq, OpenAI, and OpenRouter share a single `openaiCompatComplete` /
+`openaiCompatStream` implementation (OpenAI chat completions wire format).
+Adding a future OpenAI-compatible provider requires ~10 lines.
+
+`llm.ValidateProvider()` checks the active provider has its key set and
+returns a descriptive error naming the missing env var — called at startup
+before the TUI opens. `llm.AllProviders()` returns config status for all five;
+exposed via `./cas --providers`.
+
+The active provider is displayed in the TUI chat-focus status bar.
 
 ---
 

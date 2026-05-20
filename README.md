@@ -87,11 +87,11 @@ Contracts run in Go, external to the model. The model cannot modify, bypass, or 
 
 ### Three workspace types
 
-| Type | Badge | Model (Ollama) | Model (Anthropic) | Model (Groq) |
-|---|---|---|---|---|
-| Document | `[d]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` |
-| List | `[l]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` |
-| Code | `[c]` | `qwen2.5-coder:7b` | `claude-haiku-4-5-20251001` | `llama-3.3-70b-versatile` |
+| Type | Badge | Model (Ollama) | Model (Anthropic) | Model (Groq) | Model (OpenAI) | Model (OpenRouter) |
+|---|---|---|---|---|---|---|
+| Document | `[d]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` | `gpt-4o` | `meta-llama/llama-3.3-70b-instruct` |
+| List | `[l]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` | `gpt-4o` | `meta-llama/llama-3.3-70b-instruct` |
+| Code | `[c]` | `qwen2.5-coder:7b` | `claude-haiku-4-5-20251001` | `llama-3.3-70b-versatile` | `gpt-4o-mini` | `meta-llama/llama-3.3-70b-instruct` |
 
 ### Streaming
 
@@ -216,7 +216,7 @@ internal/
 ├── contract/    Design by Contract enforcement, fail-closed
 ├── workspace/   Lifecycle: create, update, undo, close, restore
 ├── shell/       Session manager: ProcessMessage, StreamMessage
-├── llm/         Ollama + Anthropic + Groq streaming/sync, model routing
+├── llm/         Ollama, Anthropic, Groq, OpenAI, OpenRouter — streaming/sync, model routing
 ├── runner/      Code execution — sandboxed subprocess, timeout, env isolation
 ├── plugin/      Lua plugin runtime — sandboxed gopher-lua VM
 ├── store/       Store interface, SQLiteStore (WAL), MemoryStore
@@ -260,6 +260,31 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export CAS_PROVIDER=groq
 export GROQ_API_KEY=gsk_...
 ./cas
+```
+
+### Cloud — OpenAI
+
+```bash
+export CAS_PROVIDER=openai
+export OPENAI_API_KEY=sk-...
+./cas
+```
+
+### Cloud — OpenRouter (access hundreds of models with one key)
+
+```bash
+export CAS_PROVIDER=openrouter
+export OPENROUTER_API_KEY=sk-or-...
+./cas
+
+# Use a specific model via override
+CAS_MODEL_CODE=anthropic/claude-3-5-haiku ./cas
+```
+
+### List configured providers
+
+```bash
+./cas --providers
 ```
 
 ### Flags
