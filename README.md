@@ -87,11 +87,11 @@ Contracts run in Go, external to the model. The model cannot modify, bypass, or 
 
 ### Three workspace types
 
-| Type | Badge | Model (Ollama) | Model (Anthropic) |
-|---|---|---|---|
-| Document | `[d]` | `qwen3.5:9b` | `claude-sonnet-4-6` |
-| List | `[l]` | `qwen3.5:9b` | `claude-sonnet-4-6` |
-| Code | `[c]` | `qwen2.5-coder:7b` | `claude-haiku-4-5-20251001` |
+| Type | Badge | Model (Ollama) | Model (Anthropic) | Model (Groq) |
+|---|---|---|---|---|
+| Document | `[d]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` |
+| List | `[l]` | `qwen3.5:9b` | `claude-sonnet-4-6` | `llama-3.3-70b-versatile` |
+| Code | `[c]` | `qwen2.5-coder:7b` | `claude-haiku-4-5-20251001` | `llama-3.3-70b-versatile` |
 
 ### Streaming
 
@@ -216,7 +216,7 @@ internal/
 ├── contract/    Design by Contract enforcement, fail-closed
 ├── workspace/   Lifecycle: create, update, undo, close, restore
 ├── shell/       Session manager: ProcessMessage, StreamMessage
-├── llm/         Ollama + Anthropic streaming/sync, model routing
+├── llm/         Ollama + Anthropic + Groq streaming/sync, model routing
 ├── runner/      Code execution — sandboxed subprocess, timeout, env isolation
 ├── plugin/      Lua plugin runtime — sandboxed gopher-lua VM
 ├── store/       Store interface, SQLiteStore (WAL), MemoryStore
@@ -251,6 +251,14 @@ ollama pull qwen2.5-coder:7b
 ```bash
 export CAS_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
+./cas
+```
+
+### Cloud — Groq (free tier, fastest inference)
+
+```bash
+export CAS_PROVIDER=groq
+export GROQ_API_KEY=gsk_...
 ./cas
 ```
 

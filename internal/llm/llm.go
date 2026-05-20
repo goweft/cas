@@ -1,5 +1,5 @@
 // Package llm provides the multi-provider LLM bridge for CAS.
-// Provider is selected via CAS_PROVIDER env var (ollama | anthropic).
+// Provider is selected via CAS_PROVIDER env var (ollama | anthropic | groq).
 // Model routing maps workspace type → model name per provider.
 package llm
 
@@ -22,15 +22,19 @@ type Provider string
 const (
 	ProviderOllama    Provider = "ollama"
 	ProviderAnthropic Provider = "anthropic"
+	ProviderGroq      Provider = "groq"
 )
 
 // ActiveProvider returns the provider from CAS_PROVIDER env (default: ollama).
 func ActiveProvider() Provider {
-	p := strings.ToLower(os.Getenv("CAS_PROVIDER"))
-	if p == "anthropic" {
+	switch strings.ToLower(os.Getenv("CAS_PROVIDER")) {
+	case "anthropic":
 		return ProviderAnthropic
+	case "groq":
+		return ProviderGroq
+	default:
+		return ProviderOllama
 	}
-	return ProviderOllama
 }
 
 // defaultModels maps provider → wsType → model name.
@@ -46,6 +50,12 @@ var defaultModels = map[Provider]map[string]string{
 		"list":     "claude-sonnet-4-6",
 		"code":     "claude-haiku-4-5-20251001",
 		"chat":     "claude-sonnet-4-6",
+	},
+	ProviderGroq: {
+		"document": "llama-3.3-70b-versatile",
+		"list":     "llama-3.3-70b-versatile",
+		"code":     "llama-3.3-70b-versatile",
+		"chat":     "llama-3.3-70b-versatile",
 	},
 }
 
@@ -74,6 +84,8 @@ func Complete(ctx context.Context, messages []Message, model string, temperature
 	switch ActiveProvider() {
 	case ProviderAnthropic:
 		return anthropicComplete(ctx, messages, model, temperature)
+	case ProviderGroq:
+		return groqComplete(ctx, messages, model, temperature)
 	default:
 		return ollamaComplete(ctx, messages, model, temperature)
 	}
@@ -85,6 +97,8 @@ func Stream(ctx context.Context, messages []Message, model string, temperature f
 	switch ActiveProvider() {
 	case ProviderAnthropic:
 		return anthropicStream(ctx, messages, model, temperature, onToken)
+	case ProviderGroq:
+		return groqStream(ctx, messages, model, temperature, onToken)
 	default:
 		return ollamaStream(ctx, messages, model, temperature, onToken)
 	}
@@ -375,6 +389,155 @@ func anthropicStream(ctx context.Context, messages []Message, model string, temp
 	}
 	return buf.String(), scanner.Err()
 }
+
+// ── Groq ─────────────────────────────────────────────────────────
+
+const groqBase = "https://api.groq.com/openai/v1"
+
+func groqKey() (string, error) {
+	key := os.Getenv("GROQ_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("GROQ_API_KEY is not set")
+	}
+	return key, nil
+}
+
+// groqRequest follows the OpenAI chat completions format.
+type groqRequest struct {
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	Temperature float64   `json:"temperature"`
+	MaxTokens   int       `json:"max_tokens"`
+	Stream      bool      `json:"stream,omitempty"`
+}
+
+// groqResponse is the non-streaming response shape.
+type groqResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+func groqComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
+	key, err := groqKey()
+	if err != nil {
+		return "", err
+	}
+
+	req := groqRequest{
+		Model:       model,
+		Messages:    messages,
+		Temperature: temperature,
+		MaxTokens:   4096,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		groqBase+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+key)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("groq: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("groq: status %d: %s", resp.StatusCode, string(b))
+	}
+
+	var result groqResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("groq decode: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("groq: empty choices")
+	}
+	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+}
+
+func groqStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
+	key, err := groqKey()
+	if err != nil {
+		return "", err
+	}
+
+	req := groqRequest{
+		Model:       model,
+		Messages:    messages,
+		Temperature: temperature,
+		MaxTokens:   4096,
+		Stream:      true,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		groqBase+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+key)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("groq stream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("groq stream: status %d: %s", resp.StatusCode, string(b))
+	}
+
+	var buf strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		if len(chunk.Choices) > 0 {
+			token := chunk.Choices[0].Delta.Content
+			if token != "" {
+				onToken(token)
+				buf.WriteString(token)
+			}
+		}
+	}
+	return buf.String(), scanner.Err()
+}
+
+// ── Message builders ──────────────────────────────────────────────
 
 // BuildWorkspaceMessages constructs the message slice for workspace generation.
 func BuildWorkspaceMessages(system, title, userMessage string) []Message {

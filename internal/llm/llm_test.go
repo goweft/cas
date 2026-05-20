@@ -1,12 +1,22 @@
+// Package llm provides the multi-provider LLM bridge for CAS.
+// Provider is selected via CAS_PROVIDER env var (ollama | anthropic | groq).
+// Model routing maps workspace type → model name per provider.
 package llm_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/goweft/cas/internal/llm"
 )
 
 func TestModelForOllamaDefaults(t *testing.T) {
+	os.Unsetenv("CAS_PROVIDER")
+	os.Unsetenv("CAS_MODEL_DOCUMENT")
+	os.Unsetenv("CAS_MODEL_CODE")
+	os.Unsetenv("CAS_MODEL_LIST")
+	os.Unsetenv("CAS_MODEL_CHAT")
+
 	cases := map[string]string{
 		"document": "qwen3.5:9b",
 		"list":     "qwen3.5:9b",
@@ -22,11 +32,89 @@ func TestModelForOllamaDefaults(t *testing.T) {
 	}
 }
 
+func TestModelForAnthropicDefaults(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "anthropic")
+	defer os.Unsetenv("CAS_PROVIDER")
+
+	cases := map[string]string{
+		"document": "claude-sonnet-4-6",
+		"list":     "claude-sonnet-4-6",
+		"code":     "claude-haiku-4-5-20251001",
+		"chat":     "claude-sonnet-4-6",
+	}
+	for wsType, want := range cases {
+		got := llm.ModelFor(wsType)
+		if got != want {
+			t.Errorf("ModelFor(%q) = %q, want %q", wsType, got, want)
+		}
+	}
+}
+
+func TestModelForGroqDefaults(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "groq")
+	defer os.Unsetenv("CAS_PROVIDER")
+
+	cases := map[string]string{
+		"document": "llama-3.3-70b-versatile",
+		"list":     "llama-3.3-70b-versatile",
+		"code":     "llama-3.3-70b-versatile",
+		"chat":     "llama-3.3-70b-versatile",
+		"unknown":  "llama-3.3-70b-versatile",
+	}
+	for wsType, want := range cases {
+		got := llm.ModelFor(wsType)
+		if got != want {
+			t.Errorf("ModelFor(%q) = %q, want %q", wsType, got, want)
+		}
+	}
+}
+
+func TestModelForEnvOverride(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "groq")
+	os.Setenv("CAS_MODEL_CODE", "llama3-8b-8192")
+	defer os.Unsetenv("CAS_PROVIDER")
+	defer os.Unsetenv("CAS_MODEL_CODE")
+
+	got := llm.ModelFor("code")
+	if got != "llama3-8b-8192" {
+		t.Errorf("ModelFor(code) = %q, want %q", got, "llama3-8b-8192")
+	}
+	// Other types unaffected
+	got = llm.ModelFor("document")
+	if got != "llama-3.3-70b-versatile" {
+		t.Errorf("ModelFor(document) = %q, want %q", got, "llama-3.3-70b-versatile")
+	}
+}
+
+func TestActiveProvider(t *testing.T) {
+	cases := []struct {
+		env  string
+		want llm.Provider
+	}{
+		{"", llm.ProviderOllama},
+		{"ollama", llm.ProviderOllama},
+		{"OLLAMA", llm.ProviderOllama},
+		{"anthropic", llm.ProviderAnthropic},
+		{"ANTHROPIC", llm.ProviderAnthropic},
+		{"groq", llm.ProviderGroq},
+		{"GROQ", llm.ProviderGroq},
+		{"unknown", llm.ProviderOllama}, // unknown falls back to ollama
+	}
+	for _, tc := range cases {
+		if tc.env == "" {
+			os.Unsetenv("CAS_PROVIDER")
+		} else {
+			os.Setenv("CAS_PROVIDER", tc.env)
+		}
+		got := llm.ActiveProvider()
+		if got != tc.want {
+			t.Errorf("ActiveProvider() with CAS_PROVIDER=%q = %q, want %q", tc.env, got, tc.want)
+		}
+	}
+	os.Unsetenv("CAS_PROVIDER")
+}
+
 func TestStripThink(t *testing.T) {
-	// Export stripThink via a thin wrapper for testing
-	// We test it indirectly through the public Complete function behaviour,
-	// but we can test the pattern with what we know the model emits.
-	// For now, verify the build is clean and the function exists.
 	_ = llm.ModelFor("document")
 }
 
@@ -72,13 +160,14 @@ func TestBuildChatMessagesTruncatesHistory(t *testing.T) {
 }
 
 func TestSystemFor(t *testing.T) {
+	os.Unsetenv("CAS_PROVIDER")
+
 	prompts := map[string]string{
 		"document": "doc system",
 		"code":     "code system",
 	}
 
 	got := llm.SystemFor(prompts, "document", "")
-	// With Ollama+qwen3.x /no_think may be prepended; the base must be present
 	if !contains(got, "doc system") {
 		t.Errorf("expected 'doc system' in result, got %q", got)
 	}
@@ -95,7 +184,7 @@ func TestSystemFor(t *testing.T) {
 }
 
 func TestActiveProviderDefaultsToOllama(t *testing.T) {
-	// CAS_PROVIDER is not set in test environment
+	os.Unsetenv("CAS_PROVIDER")
 	p := llm.ActiveProvider()
 	if p != llm.ProviderOllama {
 		t.Errorf("expected Ollama provider by default, got %q", p)

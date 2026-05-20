@@ -129,6 +129,7 @@ Provider is selected by `CAS_PROVIDER` environment variable.
 |-------------|--------------|---------------------------------------------------|
 | Ollama      | `ollama`     | `qwen3.5:9b` (doc/list/chat), `qwen2.5-coder:7b` (code) |
 | Anthropic   | `anthropic`  | `claude-sonnet-4-6` (doc/list/chat), `claude-haiku-4-5-20251001` (code) |
+| Groq        | `groq`       | `llama-3.3-70b-versatile` (all types); set `GROQ_API_KEY` |
 
 Model overrides: `CAS_MODEL_{TYPE}` env vars (e.g. `CAS_MODEL_CODE`).
 
