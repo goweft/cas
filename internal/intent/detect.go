@@ -24,6 +24,7 @@ const (
 	KindChat   Kind = "chat"
 	KindPlugin  Kind = "plugin_command"
 	KindCombine Kind = "combine_workspaces"
+	KindIngest  Kind = "ingest_mcp"
 )
 
 // WSType is the workspace type inferred from the message.
@@ -69,7 +70,9 @@ var selfEditPatterns []*regexp.Regexp
 var closePatterns []*regexp.Regexp
 var runPatterns []*regexp.Regexp
 var combinePatterns []*regexp.Regexp
+var ingestPatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
+var ingestURLRe *regexp.Regexp
 
 func init() {
 	ci := regexp.MustCompile // alias for readability
@@ -135,14 +138,26 @@ func init() {
 		ci(`(?i)\bmerge (all|these|the) (workspace|document|tab)`),
 	}
 
+	ingestPatterns = []*regexp.Regexp{
+		ci(`(?i)^ingest\s+(https?://\S+)`),
+		ci(`(?i)^connect\s+(to\s+)?(https?://\S+)`),
+		ci(`(?i)^add\s+(mcp\s+)?(server|source)\s+(https?://\S+)`),
+	}
+
 	titleHintRe = regexp.MustCompile(
 		`(?i)\b(?:write|draft|create|make|start|begin|compose)\s+(?:me\s+)?(?:a|an|the|my|our)?\s*(.+)`,
 	)
+	ingestURLRe = regexp.MustCompile(`(?i)(?:ingest|connect(?:\s+to)?|add\s+(?:mcp\s+)?(?:server|source))\s+(https?://\S+)`)
 }
 
 // Detect classifies a user message and returns an Intent.
 // This is the hot path — no allocations in the common case.
 func Detect(message string) Intent {
+	for _, re := range ingestPatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindIngest, WSType: WSType("mcp"), TitleHint: extractIngestURL(message)}
+		}
+	}
 	for _, re := range closePatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindClose, WSType: WSDocument}
@@ -224,4 +239,12 @@ func titleCase(words []string) string {
 		}
 	}
 	return string(out)
+}
+
+func extractIngestURL(message string) string {
+	m := ingestURLRe.FindStringSubmatch(message)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
 }

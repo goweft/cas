@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/goweft/cas/internal/agent"
+	mcpclient "github.com/goweft/cas/internal/mcp"
 	"github.com/goweft/cas/internal/llm"
 )
 
@@ -14,7 +15,7 @@ import (
 func TestGenerationAgentContractBadType(t *testing.T) {
 	a := agent.NewGenerationAgent()
 	_, err := a.Generate(context.Background(), agent.GenerationRequest{
-		WSType: "spreadsheet", // invalid
+		WSType: "spreadsheet",
 		Title:  "Test",
 		Prompt: "write something",
 	})
@@ -31,7 +32,7 @@ func TestGenerationAgentContractEmptyPrompt(t *testing.T) {
 	_, err := a.Generate(context.Background(), agent.GenerationRequest{
 		WSType: "document",
 		Title:  "Test",
-		Prompt: "   ", // whitespace only
+		Prompt: "   ",
 	})
 	if err == nil {
 		t.Fatal("expected contract violation for empty prompt, got nil")
@@ -58,20 +59,6 @@ func TestGenerationAgentContractEmptyTitle(t *testing.T) {
 
 func TestGenerationAgentValidTypes(t *testing.T) {
 	t.Skip("skipped: requires live LLM endpoint")
-	// Just check that contract pre-checks pass for valid types.
-	// We don't make a real LLM call — we expect a network/auth error, not a contract error.
-	a := agent.NewGenerationAgent()
-	for _, wsType := range []string{"document", "code", "list"} {
-		_, err := a.Generate(context.Background(), agent.GenerationRequest{
-			WSType: wsType,
-			Title:  "Test",
-			Prompt: "write something",
-		})
-		// Should not be a contract violation
-		if err != nil && strings.Contains(err.Error(), "contract violation") {
-			t.Errorf("wsType %q should pass preconditions, got contract violation: %v", wsType, err)
-		}
-	}
 }
 
 // ── EditAgent ─────────────────────────────────────────────────────
@@ -126,16 +113,6 @@ func TestEditAgentContractBadType(t *testing.T) {
 
 func TestEditAgentValidPreconditions(t *testing.T) {
 	t.Skip("skipped: requires live LLM endpoint")
-	a := agent.NewEditAgent()
-	_, err := a.Edit(context.Background(), agent.EditRequest{
-		WSType:         "code",
-		Title:          "Test",
-		CurrentContent: "package main\n\nfunc main() {}",
-		EditRequest:    "add a print statement",
-	})
-	if err != nil && strings.Contains(err.Error(), "contract violation") {
-		t.Errorf("valid request should pass preconditions, got: %v", err)
-	}
 }
 
 // ── CombineAgent ─────────────────────────────────────────────────
@@ -161,7 +138,7 @@ func TestCombineAgentContractEmptySource(t *testing.T) {
 	_, err := a.Combine(context.Background(), agent.CombineRequest{
 		Sources: []struct{ Title, Type, Content string }{
 			{Title: "One", Type: "document", Content: "some content"},
-			{Title: "Two", Type: "document", Content: "   "}, // empty
+			{Title: "Two", Type: "document", Content: "   "},
 		},
 		Instruction: "combine them",
 	})
@@ -175,17 +152,6 @@ func TestCombineAgentContractEmptySource(t *testing.T) {
 
 func TestCombineAgentValidPreconditions(t *testing.T) {
 	t.Skip("skipped: requires live LLM endpoint")
-	a := agent.NewCombineAgent()
-	_, err := a.Combine(context.Background(), agent.CombineRequest{
-		Sources: []struct{ Title, Type, Content string }{
-			{Title: "One", Type: "document", Content: "content one"},
-			{Title: "Two", Type: "document", Content: "content two"},
-		},
-		Instruction: "combine them",
-	})
-	if err != nil && strings.Contains(err.Error(), "contract violation") {
-		t.Errorf("valid request should pass preconditions, got: %v", err)
-	}
 }
 
 // ── ChatAgent ─────────────────────────────────────────────────────
@@ -223,12 +189,101 @@ func TestChatAgentContractExcessiveHistory(t *testing.T) {
 
 func TestChatAgentValidPreconditions(t *testing.T) {
 	t.Skip("skipped: requires live LLM endpoint")
-	a := agent.NewChatAgent()
-	_, err := a.Chat(context.Background(), agent.ChatRequest{
-		Message:     "hello",
-		Temperature: 0.7,
-	})
-	if err != nil && strings.Contains(err.Error(), "contract violation") {
-		t.Errorf("valid request should pass preconditions, got: %v", err)
+}
+
+// ── MCPAgent ──────────────────────────────────────────────────────
+
+func TestMCPAgentContractEmptyInstruction(t *testing.T) {
+	a := agent.NewMCPAgent()
+	conn := &mcpclient.Connection{
+		ServerURL: "http://localhost:3000",
+		Tools:     []mcpclient.Tool{{Name: "ping", Description: "ping the server"}},
 	}
+	_, err := a.Act(context.Background(), agent.MCPRequest{
+		Instruction: "  ",
+		Connection:  conn,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for empty instruction, got nil")
+	}
+	if !strings.Contains(err.Error(), "instruction_not_empty") {
+		t.Errorf("expected instruction_not_empty violation, got: %v", err)
+	}
+}
+
+func TestMCPAgentContractNilConnection(t *testing.T) {
+	a := agent.NewMCPAgent()
+	_, err := a.Act(context.Background(), agent.MCPRequest{
+		Instruction: "list issues",
+		Connection:  nil,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for nil connection, got nil")
+	}
+	if !strings.Contains(err.Error(), "connection_present") {
+		t.Errorf("expected connection_present violation, got: %v", err)
+	}
+}
+
+func TestMCPAgentContractNoTools(t *testing.T) {
+	a := agent.NewMCPAgent()
+	conn := &mcpclient.Connection{
+		ServerURL: "http://localhost:3000",
+		Tools:     []mcpclient.Tool{},
+	}
+	_, err := a.Act(context.Background(), agent.MCPRequest{
+		Instruction: "do something",
+		Connection:  conn,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for no tools, got nil")
+	}
+	if !strings.Contains(err.Error(), "connection_has_tools") {
+		t.Errorf("expected connection_has_tools violation, got: %v", err)
+	}
+}
+
+func TestMCPAgentContractInvalidAutonomy(t *testing.T) {
+	a := agent.NewMCPAgent()
+	conn := &mcpclient.Connection{
+		ServerURL: "http://localhost:3000",
+		Tools:     []mcpclient.Tool{{Name: "ping", Description: "ping"}},
+	}
+	_, err := a.Act(context.Background(), agent.MCPRequest{
+		Instruction: "do something",
+		Connection:  conn,
+		Autonomy:    agent.Autonomy("full-auto"),
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for invalid autonomy, got nil")
+	}
+	if !strings.Contains(err.Error(), "autonomy_valid") {
+		t.Errorf("expected autonomy_valid violation, got: %v", err)
+	}
+}
+
+func TestMCPAgentAutonomyConstants(t *testing.T) {
+	if agent.AutonomySuggest == "" || agent.AutonomyConfirm == "" || agent.AutonomyRun == "" {
+		t.Error("autonomy constants must not be empty")
+	}
+	if agent.AutonomySuggest == agent.AutonomyConfirm ||
+		agent.AutonomyConfirm == agent.AutonomyRun ||
+		agent.AutonomySuggest == agent.AutonomyRun {
+		t.Error("autonomy constants must be distinct")
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
+		func() bool {
+			for i := 0; i <= len(s)-len(sub); i++ {
+				if s[i:i+len(sub)] == sub {
+					return true
+				}
+			}
+			return false
+		}())
 }

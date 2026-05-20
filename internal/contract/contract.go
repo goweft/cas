@@ -106,7 +106,7 @@ func DefaultWorkspaceContract(wsType string, contentSize int) *Contract {
 			Name:        "workspace_type_allowed",
 			Description: "workspace type must be document, code, or list",
 			Check: func() bool {
-				return wsType == "document" || wsType == "code" || wsType == "list"
+				return wsType == "document" || wsType == "code" || wsType == "list" || wsType == "mcp"
 			},
 		},
 	}

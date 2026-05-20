@@ -13,6 +13,7 @@ import (
 
 	"github.com/goweft/cas/internal/agent"
 	"github.com/goweft/cas/internal/conductor"
+	casmc "github.com/goweft/cas/internal/mcp"
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/store"
@@ -71,6 +72,8 @@ type Shell struct {
 	editAgent  *agent.EditAgent
 	combAgent  *agent.CombineAgent
 	chatAgent  *agent.ChatAgent
+	mcpAgent   *agent.MCPAgent
+	mcpConns   map[string]*casmc.Connection // wsID → connection
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -90,6 +93,8 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
 		chatAgent:  agent.NewChatAgent(),
+		mcpAgent:   agent.NewMCPAgent(),
+		mcpConns:   make(map[string]*casmc.Connection),
 	}
 	sh.plugins.Load()
 	return sh
@@ -108,6 +113,8 @@ func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell 
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
 		chatAgent:  agent.NewChatAgent(),
+		mcpAgent:   agent.NewMCPAgent(),
+		mcpConns:   make(map[string]*casmc.Connection),
 	}
 	sh.plugins.Load()
 	return sh
@@ -211,6 +218,8 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		resp, err = sh.handleRun(ctx, sess)
 	case intent.KindCombine:
 		resp, err = sh.handleCombine(ctx, sess, message)
+	case intent.KindIngest:
+		resp, err = sh.handleIngest(ctx, sess, in)
 	default:
 		resp, err = sh.handleChat(ctx, sess, message)
 	}
@@ -279,6 +288,12 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
 	case intent.KindCombine:
 		resp, err = sh.streamCombine(ctx, sess, message, onToken)
+	case intent.KindIngest:
+		r, e := sh.handleIngest(ctx, sess, in)
+		if e != nil {
+			return nil, e
+		}
+		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
 	default:
 		resp, err = sh.streamChat(ctx, sess, message, onToken)
 	}
@@ -611,6 +626,78 @@ func (sh *Shell) streamCombine(ctx context.Context, sess *Session, message strin
 
 	reply := fmt.Sprintf("Combined %d workspaces into %q.", len(sources), ws.Title)
 	return &StreamResponse{ChatReply: reply, Workspace: ws, Intent: intent.KindCombine}, nil
+}
+
+// handleIngest connects to an MCP server and materializes it as a workspace.
+func (sh *Shell) handleIngest(ctx context.Context, sess *Session, in intent.Intent) (*Response, error) {
+	serverURL := in.TitleHint
+	if serverURL == "" {
+		return &Response{ChatReply: "No server URL found. Usage: ingest <url>", Intent: intent.KindIngest}, nil
+	}
+
+	conn, err := casmc.Connect(ctx, serverURL)
+	if err != nil {
+		return &Response{
+			ChatReply: fmt.Sprintf("Failed to connect to %s: %v", serverURL, err),
+			Intent:    intent.KindIngest,
+		}, nil
+	}
+
+	title := "MCP: " + serverURL
+	content := formatMCPWorkspace(conn)
+	ws, err := sh.workspaces.Create(newID(), "mcp", title, content, sess.ID)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	sh.mcpConns[ws.ID] = conn
+
+	reply := fmt.Sprintf("Connected to %s — %d tool(s) available. Ask me to use any of them.", serverURL, len(conn.Tools))
+	return &Response{ChatReply: reply, Workspace: ws, Intent: intent.KindIngest}, nil
+}
+
+// HandleMCPAction executes a user instruction against the MCP workspace.
+// Called by the shell when the active workspace is type "mcp".
+func (sh *Shell) HandleMCPAction(ctx context.Context, wsID, instruction string, autonomy agent.Autonomy) (*agent.MCPResult, error) {
+	conn, ok := sh.mcpConns[wsID]
+	if !ok {
+		return nil, fmt.Errorf("no MCP connection for workspace %q", wsID)
+	}
+	return sh.mcpAgent.Act(ctx, agent.MCPRequest{
+		Instruction: instruction,
+		Connection:  conn,
+		Autonomy:    autonomy,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.3,
+	})
+}
+
+// CloseMCPWorkspace closes the MCP connection when its workspace is closed.
+func (sh *Shell) CloseMCPWorkspace(wsID string) {
+	if conn, ok := sh.mcpConns[wsID]; ok {
+		conn.Close()
+		delete(sh.mcpConns, wsID)
+	}
+}
+
+// formatMCPWorkspace produces the initial content for an MCP workspace panel.
+func formatMCPWorkspace(conn *casmc.Connection) string {
+	var sb strings.Builder
+	sb.WriteString("# MCP Server\n\n")
+	sb.WriteString("**URL:** " + conn.ServerURL + "\n\n")
+	sb.WriteString("## Available Tools\n\n")
+	for _, t := range conn.Tools {
+		sb.WriteString("### " + t.Name + "\n")
+		if t.Description != "" {
+			sb.WriteString(t.Description + "\n")
+		}
+		sb.WriteString("\n")
+	}
+	if len(conn.Tools) == 0 {
+		sb.WriteString("_(no tools discovered)_\n")
+	}
+	return sb.String()
 }
 
 // crossWorkspaceRefs finds workspaces referenced in the message other than the target.

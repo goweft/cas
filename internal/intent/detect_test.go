@@ -251,3 +251,45 @@ func TestCombineDoesNotMatchNormal(t *testing.T) {
 		})
 	}
 }
+
+func TestIngestDetection(t *testing.T) {
+	cases := []struct {
+		message string
+		wantURL string
+	}{
+		{"ingest http://localhost:3000/sse", "http://localhost:3000/sse"},
+		{"ingest https://mcp.example.com/api", "https://mcp.example.com/api"},
+		{"connect to https://mcp.linear.app/sse", "https://mcp.linear.app/sse"},
+		{"connect https://api.example.com/mcp", "https://api.example.com/mcp"},
+		{"add mcp server https://tools.internal/sse", "https://tools.internal/sse"},
+		{"add server https://tools.internal/sse", "https://tools.internal/sse"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != intent.KindIngest {
+				t.Errorf("Detect(%q) = %q, want KindIngest", tc.message, got.Kind)
+			}
+			if got.TitleHint != tc.wantURL {
+				t.Errorf("Detect(%q).TitleHint = %q, want %q", tc.message, got.TitleHint, tc.wantURL)
+			}
+		})
+	}
+}
+
+func TestIngestDoesNotMatchNormal(t *testing.T) {
+	cases := []string{
+		"write a document",
+		"ingest some data",         // no URL
+		"connect the dots",         // no URL
+		"add a section",
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			got := intent.Detect(msg)
+			if got.Kind == intent.KindIngest {
+				t.Errorf("Detect(%q) should not be KindIngest", msg)
+			}
+		})
+	}
+}
