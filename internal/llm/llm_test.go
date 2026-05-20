@@ -1,6 +1,3 @@
-// Package llm provides the multi-provider LLM bridge for CAS.
-// Provider is selected via CAS_PROVIDER env var (ollama | anthropic | groq).
-// Model routing maps workspace type → model name per provider.
 package llm_test
 
 import (
@@ -22,7 +19,7 @@ func TestModelForOllamaDefaults(t *testing.T) {
 		"list":     "qwen3.5:9b",
 		"code":     "qwen2.5-coder:7b",
 		"chat":     "qwen3.5:9b",
-		"unknown":  "qwen3.5:9b", // falls back to document model
+		"unknown":  "qwen3.5:9b",
 	}
 	for wsType, want := range cases {
 		got := llm.ModelFor(wsType)
@@ -69,6 +66,37 @@ func TestModelForGroqDefaults(t *testing.T) {
 	}
 }
 
+func TestModelForOpenAIDefaults(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "openai")
+	defer os.Unsetenv("CAS_PROVIDER")
+
+	cases := map[string]string{
+		"document": "gpt-4o",
+		"list":     "gpt-4o",
+		"code":     "gpt-4o-mini",
+		"chat":     "gpt-4o",
+	}
+	for wsType, want := range cases {
+		got := llm.ModelFor(wsType)
+		if got != want {
+			t.Errorf("ModelFor(%q) = %q, want %q", wsType, got, want)
+		}
+	}
+}
+
+func TestModelForOpenRouterDefaults(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "openrouter")
+	defer os.Unsetenv("CAS_PROVIDER")
+
+	want := "meta-llama/llama-3.3-70b-instruct"
+	for _, wsType := range []string{"document", "list", "code", "chat"} {
+		got := llm.ModelFor(wsType)
+		if got != want {
+			t.Errorf("ModelFor(%q) = %q, want %q", wsType, got, want)
+		}
+	}
+}
+
 func TestModelForEnvOverride(t *testing.T) {
 	os.Setenv("CAS_PROVIDER", "groq")
 	os.Setenv("CAS_MODEL_CODE", "llama3-8b-8192")
@@ -79,7 +107,6 @@ func TestModelForEnvOverride(t *testing.T) {
 	if got != "llama3-8b-8192" {
 		t.Errorf("ModelFor(code) = %q, want %q", got, "llama3-8b-8192")
 	}
-	// Other types unaffected
 	got = llm.ModelFor("document")
 	if got != "llama-3.3-70b-versatile" {
 		t.Errorf("ModelFor(document) = %q, want %q", got, "llama-3.3-70b-versatile")
@@ -98,7 +125,11 @@ func TestActiveProvider(t *testing.T) {
 		{"ANTHROPIC", llm.ProviderAnthropic},
 		{"groq", llm.ProviderGroq},
 		{"GROQ", llm.ProviderGroq},
-		{"unknown", llm.ProviderOllama}, // unknown falls back to ollama
+		{"openai", llm.ProviderOpenAI},
+		{"OPENAI", llm.ProviderOpenAI},
+		{"openrouter", llm.ProviderOpenRouter},
+		{"OPENROUTER", llm.ProviderOpenRouter},
+		{"unknown", llm.ProviderOllama},
 	}
 	for _, tc := range cases {
 		if tc.env == "" {
@@ -109,6 +140,73 @@ func TestActiveProvider(t *testing.T) {
 		got := llm.ActiveProvider()
 		if got != tc.want {
 			t.Errorf("ActiveProvider() with CAS_PROVIDER=%q = %q, want %q", tc.env, got, tc.want)
+		}
+	}
+	os.Unsetenv("CAS_PROVIDER")
+}
+
+func TestValidateProviderOllamaNoKey(t *testing.T) {
+	os.Unsetenv("CAS_PROVIDER")
+	if err := llm.ValidateProvider(); err != nil {
+		t.Errorf("ollama should not require a key, got error: %v", err)
+	}
+}
+
+func TestValidateProviderMissingKey(t *testing.T) {
+	cases := []struct {
+		provider string
+		keyEnv   string
+	}{
+		{"anthropic", "ANTHROPIC_API_KEY"},
+		{"groq", "GROQ_API_KEY"},
+		{"openai", "OPENAI_API_KEY"},
+		{"openrouter", "OPENROUTER_API_KEY"},
+	}
+	for _, tc := range cases {
+		os.Setenv("CAS_PROVIDER", tc.provider)
+		os.Unsetenv(tc.keyEnv)
+		err := llm.ValidateProvider()
+		if err == nil {
+			t.Errorf("provider %q with no key should return error", tc.provider)
+		}
+		os.Unsetenv("CAS_PROVIDER")
+	}
+}
+
+func TestValidateProviderKeyPresent(t *testing.T) {
+	os.Setenv("CAS_PROVIDER", "groq")
+	os.Setenv("GROQ_API_KEY", "gsk_test")
+	defer os.Unsetenv("CAS_PROVIDER")
+	defer os.Unsetenv("GROQ_API_KEY")
+
+	if err := llm.ValidateProvider(); err != nil {
+		t.Errorf("groq with key set should not error, got: %v", err)
+	}
+}
+
+func TestAllProvidersLength(t *testing.T) {
+	statuses := llm.AllProviders()
+	if len(statuses) != 5 {
+		t.Errorf("expected 5 providers, got %d", len(statuses))
+	}
+}
+
+func TestAllProvidersExactlyOneActive(t *testing.T) {
+	for _, envVal := range []string{"", "ollama", "anthropic", "groq", "openai", "openrouter"} {
+		if envVal == "" {
+			os.Unsetenv("CAS_PROVIDER")
+		} else {
+			os.Setenv("CAS_PROVIDER", envVal)
+		}
+		statuses := llm.AllProviders()
+		activeCount := 0
+		for _, ps := range statuses {
+			if ps.Active {
+				activeCount++
+			}
+		}
+		if activeCount != 1 {
+			t.Errorf("CAS_PROVIDER=%q: expected exactly 1 active provider, got %d", envVal, activeCount)
 		}
 	}
 	os.Unsetenv("CAS_PROVIDER")
@@ -153,7 +251,6 @@ func TestBuildChatMessagesTruncatesHistory(t *testing.T) {
 		history[i] = llm.Message{Role: "user", Content: "msg"}
 	}
 	msgs := llm.BuildChatMessages("system", history, "new message")
-	// system + up to 6 history + new message = 8 max
 	if len(msgs) > 8 {
 		t.Errorf("expected at most 8 messages (6 history + system + new), got %d", len(msgs))
 	}

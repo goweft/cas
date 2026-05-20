@@ -22,6 +22,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/goweft/cas/internal/intent"
+	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/shell"
 	"github.com/goweft/cas/internal/workspace"
 )
@@ -877,12 +878,14 @@ func (m Model) renderStatus() string {
 			styleDim.Render("ctrl+c: quit"),
 		}, "  │  ")
 	default:
+		provider := string(llm.ActiveProvider())
 		return "  " + strings.Join([]string{
 			styleDim.Render("↑↓: scroll history"),
 			styleDim.Render("enter: send"),
 			styleDim.Render("tab: workspace"),
 			styleDim.Render("ctrl+n: new session"),
 			styleDim.Render("ctrl+c: quit"),
+			styleDim.Render("[" + provider + "]"),
 		}, "  │  ")
 	}
 }

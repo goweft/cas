@@ -23,6 +23,8 @@ const (
 	ProviderOllama    Provider = "ollama"
 	ProviderAnthropic Provider = "anthropic"
 	ProviderGroq      Provider = "groq"
+	ProviderOpenAI    Provider = "openai"
+	ProviderOpenRouter Provider = "openrouter"
 )
 
 // ActiveProvider returns the provider from CAS_PROVIDER env (default: ollama).
@@ -32,9 +34,50 @@ func ActiveProvider() Provider {
 		return ProviderAnthropic
 	case "groq":
 		return ProviderGroq
+	case "openai":
+		return ProviderOpenAI
+	case "openrouter":
+		return ProviderOpenRouter
 	default:
 		return ProviderOllama
 	}
+}
+
+// ProviderStatus describes a provider's configuration state.
+type ProviderStatus struct {
+	Provider Provider
+	Active   bool
+	KeySet   bool
+	KeyEnv   string // env var name for the API key, empty for Ollama
+}
+
+// AllProviders returns the configuration status of every provider.
+// Useful for --providers output and startup validation.
+func AllProviders() []ProviderStatus {
+	active := ActiveProvider()
+	return []ProviderStatus{
+		{Provider: ProviderOllama, Active: active == ProviderOllama, KeySet: true, KeyEnv: ""},
+		{Provider: ProviderAnthropic, Active: active == ProviderAnthropic, KeySet: os.Getenv("ANTHROPIC_API_KEY") != "", KeyEnv: "ANTHROPIC_API_KEY"},
+		{Provider: ProviderGroq, Active: active == ProviderGroq, KeySet: os.Getenv("GROQ_API_KEY") != "", KeyEnv: "GROQ_API_KEY"},
+		{Provider: ProviderOpenAI, Active: active == ProviderOpenAI, KeySet: os.Getenv("OPENAI_API_KEY") != "", KeyEnv: "OPENAI_API_KEY"},
+		{Provider: ProviderOpenRouter, Active: active == ProviderOpenRouter, KeySet: os.Getenv("OPENROUTER_API_KEY") != "", KeyEnv: "OPENROUTER_API_KEY"},
+	}
+}
+
+// ValidateProvider checks whether the active provider has its required API key set.
+// Returns nil for Ollama (no key needed) or if the key is present.
+// Returns an error with the env var name if the key is missing.
+func ValidateProvider() error {
+	active := ActiveProvider()
+	for _, ps := range AllProviders() {
+		if ps.Provider == active {
+			if ps.KeyEnv != "" && !ps.KeySet {
+				return fmt.Errorf("provider %q requires %s to be set", string(active), ps.KeyEnv)
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 // defaultModels maps provider → wsType → model name.
@@ -56,6 +99,18 @@ var defaultModels = map[Provider]map[string]string{
 		"list":     "llama-3.3-70b-versatile",
 		"code":     "llama-3.3-70b-versatile",
 		"chat":     "llama-3.3-70b-versatile",
+	},
+	ProviderOpenAI: {
+		"document": "gpt-4o",
+		"list":     "gpt-4o",
+		"code":     "gpt-4o-mini",
+		"chat":     "gpt-4o",
+	},
+	ProviderOpenRouter: {
+		"document": "meta-llama/llama-3.3-70b-instruct",
+		"list":     "meta-llama/llama-3.3-70b-instruct",
+		"code":     "meta-llama/llama-3.3-70b-instruct",
+		"chat":     "meta-llama/llama-3.3-70b-instruct",
 	},
 }
 
@@ -86,6 +141,10 @@ func Complete(ctx context.Context, messages []Message, model string, temperature
 		return anthropicComplete(ctx, messages, model, temperature)
 	case ProviderGroq:
 		return groqComplete(ctx, messages, model, temperature)
+	case ProviderOpenAI:
+		return openaiComplete(ctx, messages, model, temperature)
+	case ProviderOpenRouter:
+		return openrouterComplete(ctx, messages, model, temperature)
 	default:
 		return ollamaComplete(ctx, messages, model, temperature)
 	}
@@ -99,6 +158,10 @@ func Stream(ctx context.Context, messages []Message, model string, temperature f
 		return anthropicStream(ctx, messages, model, temperature, onToken)
 	case ProviderGroq:
 		return groqStream(ctx, messages, model, temperature, onToken)
+	case ProviderOpenAI:
+		return openaiStream(ctx, messages, model, temperature, onToken)
+	case ProviderOpenRouter:
+		return openrouterStream(ctx, messages, model, temperature, onToken)
 	default:
 		return ollamaStream(ctx, messages, model, temperature, onToken)
 	}
@@ -402,8 +465,86 @@ func groqKey() (string, error) {
 	return key, nil
 }
 
-// groqRequest follows the OpenAI chat completions format.
-type groqRequest struct {
+func groqComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
+	key, err := groqKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatComplete(ctx, groqBase, key, "", messages, model, temperature)
+}
+
+func groqStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
+	key, err := groqKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatStream(ctx, groqBase, key, "", messages, model, temperature, onToken)
+}
+
+
+// ── OpenAI ───────────────────────────────────────────────────────
+
+const openaiBase = "https://api.openai.com/v1"
+
+func openaiKey() (string, error) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY is not set")
+	}
+	return key, nil
+}
+
+func openaiComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
+	key, err := openaiKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatComplete(ctx, openaiBase, key, "", messages, model, temperature)
+}
+
+func openaiStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
+	key, err := openaiKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatStream(ctx, openaiBase, key, "", messages, model, temperature, onToken)
+}
+
+// ── OpenRouter ───────────────────────────────────────────────────
+
+const openrouterBase = "https://openrouter.ai/api/v1"
+
+func openrouterKey() (string, error) {
+	key := os.Getenv("OPENROUTER_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
+	}
+	return key, nil
+}
+
+func openrouterComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
+	key, err := openrouterKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatComplete(ctx, openrouterBase, key, "https://github.com/goweft/cas", messages, model, temperature)
+}
+
+func openrouterStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
+	key, err := openrouterKey()
+	if err != nil {
+		return "", err
+	}
+	return openaiCompatStream(ctx, openrouterBase, key, "https://github.com/goweft/cas", messages, model, temperature, onToken)
+}
+
+// ── OpenAI-compatible shared implementation ──────────────────────
+//
+// Both OpenAI and OpenRouter use the OpenAI chat completions API format.
+// referer is sent as HTTP-Referer and X-Title for OpenRouter attribution;
+// pass empty string for OpenAI.
+
+type openaiCompatRequest struct {
 	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`
 	Temperature float64   `json:"temperature"`
@@ -411,8 +552,7 @@ type groqRequest struct {
 	Stream      bool      `json:"stream,omitempty"`
 }
 
-// groqResponse is the non-streaming response shape.
-type groqResponse struct {
+type openaiCompatResponse struct {
 	Choices []struct {
 		Message struct {
 			Content string `json:"content"`
@@ -420,13 +560,8 @@ type groqResponse struct {
 	} `json:"choices"`
 }
 
-func groqComplete(ctx context.Context, messages []Message, model string, temperature float64) (string, error) {
-	key, err := groqKey()
-	if err != nil {
-		return "", err
-	}
-
-	req := groqRequest{
+func openaiCompatComplete(ctx context.Context, base, key, referer string, messages []Message, model string, temperature float64) (string, error) {
+	req := openaiCompatRequest{
 		Model:       model,
 		Messages:    messages,
 		Temperature: temperature,
@@ -438,42 +573,41 @@ func groqComplete(ctx context.Context, messages []Message, model string, tempera
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		groqBase+"/chat/completions", bytes.NewReader(body))
+		base+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+key)
+	if referer != "" {
+		httpReq.Header.Set("HTTP-Referer", referer)
+		httpReq.Header.Set("X-Title", "CAS")
+	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("groq: %w", err)
+		return "", fmt.Errorf("openai-compat: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("groq: status %d: %s", resp.StatusCode, string(b))
+		return "", fmt.Errorf("openai-compat: status %d: %s", resp.StatusCode, string(b))
 	}
 
-	var result groqResponse
+	var result openaiCompatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("groq decode: %w", err)
+		return "", fmt.Errorf("openai-compat decode: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("groq: empty choices")
+		return "", fmt.Errorf("openai-compat: empty choices")
 	}
 	return strings.TrimSpace(result.Choices[0].Message.Content), nil
 }
 
-func groqStream(ctx context.Context, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
-	key, err := groqKey()
-	if err != nil {
-		return "", err
-	}
-
-	req := groqRequest{
+func openaiCompatStream(ctx context.Context, base, key, referer string, messages []Message, model string, temperature float64, onToken func(string)) (string, error) {
+	req := openaiCompatRequest{
 		Model:       model,
 		Messages:    messages,
 		Temperature: temperature,
@@ -486,23 +620,27 @@ func groqStream(ctx context.Context, messages []Message, model string, temperatu
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		groqBase+"/chat/completions", bytes.NewReader(body))
+		base+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+key)
+	if referer != "" {
+		httpReq.Header.Set("HTTP-Referer", referer)
+		httpReq.Header.Set("X-Title", "CAS")
+	}
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("groq stream: %w", err)
+		return "", fmt.Errorf("openai-compat stream: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("groq stream: status %d: %s", resp.StatusCode, string(b))
+		return "", fmt.Errorf("openai-compat stream: status %d: %s", resp.StatusCode, string(b))
 	}
 
 	var buf strings.Builder
