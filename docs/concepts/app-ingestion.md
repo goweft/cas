@@ -1,6 +1,6 @@
 # App Ingestion
 
-**Status:** Concept. Depends on sub-agent decomposition (planned, not yet designed).
+**Status:** Steps 1 and 2 implemented. Step 3 (native app) research-phase.
 
 ---
 
@@ -184,16 +184,16 @@ Prerequisite ──────── sub-agent decomposition with Heddle contra
                       Not yet designed in detail. Load-bearing for what
                       follows — every ingested workspace binds a sub-agent.
 
-Step 1 ────────────── API-mode ingestion
+Step 1 ────────────── API-mode ingestion  ✓ SHIPPED (784e94e)
                       · Workspace surface (operations + state + sub-agent)
                       · Autonomy dial
                       · Scoped memory with intent tags
 
-Step 2 ────────────── WebView-mode ingestion
+Step 2 ────────────── WebView-mode ingestion  ✓ SHIPPED (df4372d)
                       · Embedded browser runtime
                       · Authoritative DOM access
 
-Step 3 ────────────── Native app window adoption
+Step 3 ────────────── Native app window adoption  (research-phase)
                       · Platform-specific (research-heavy)
 ```
 

@@ -85,7 +85,9 @@ contract.CheckPostconditions()  // did the output meet requirements?
 
 Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1988).
 
-Every LLM call is owned by a named agent (`GenerationAgent`, `EditAgent`, `CombineAgent`, `ChatAgent`). Contracts are frozen before the LLM call and checked again after. The shell delegates to agents and has no remaining LLM call sites — it only routes.
+Every LLM call is owned by a named agent (`GenerationAgent`, `EditAgent`, `CombineAgent`, `ChatAgent`, `MCPAgent`, `WebAgent`). Contracts are frozen before the LLM call and checked again after. The shell delegates to agents and has no remaining LLM call sites — it only routes.
+
+`MCPAgent` and `WebAgent` operate under an **autonomy dial** (`suggest` / `confirm` / `run`) that governs whether actions are planned only, executed with confirmation, or executed freely within their workspace scope. The contract enforces that any tool or URL used exists on the bound server or page — the agent cannot reach outside its workspace.
 
 ### Three workspace types
 
@@ -215,8 +217,9 @@ Full terminal editor via `charmbracelet/bubbles` textarea. All standard cursor m
 ```
 internal/
 ├── intent/      Zero-latency intent detection — regex, no LLM call
-├── agent/       Named sub-agents: GenerationAgent, EditAgent, CombineAgent, ChatAgent
-│                Each owns one category of LLM call with a frozen contract
+├── agent/       Six named sub-agents, each with a frozen contract
+│                GenerationAgent, EditAgent, CombineAgent, ChatAgent,
+│                MCPAgent (tool calls), WebAgent (web actions)
 │                Shell has no remaining LLM call sites — it only routes
 ├── contract/    Design by Contract enforcement, fail-closed
 ├── workspace/   Lifecycle: create, update, undo, close, restore
@@ -224,6 +227,8 @@ internal/
 ├── llm/         Ollama, Anthropic, Groq, OpenAI, OpenRouter — streaming/sync, model routing
 ├── runner/      Code execution — sandboxed subprocess, timeout, env isolation
 ├── plugin/      Lua plugin runtime — sandboxed gopher-lua VM
+├── mcp/         MCP client — connect, discover tools, call, close (SSE transport)
+├── webview/     HTTP fetch + HTML parser — title, headings, links, body text
 ├── store/       Store interface, SQLiteStore (WAL), MemoryStore
 └── conductor/   Behavioral learning — observe, profile, user_context
 ui/              Bubble Tea TUI: split panel, tabs, streaming, inline edit
@@ -290,6 +295,28 @@ CAS_MODEL_CODE=anthropic/claude-3-5-haiku ./cas
 
 ```bash
 ./cas --providers
+```
+
+### Ingest an MCP server
+
+```bash
+# In chat: connects and opens a workspace with the server's tools listed
+ingest https://mcp.linear.app/sse
+
+# Then ask the agent to use a tool:
+# "list my open issues"  →  MCPAgent reasons, selects tool, calls it
+```
+
+### Browse a web page
+
+```bash
+# In chat: fetches the page and opens a workspace with its content
+browse https://golang.org
+
+# Then ask the agent to work with it:
+# "summarise the main sections"
+# "navigate to https://golang.org/doc/install"
+# "extract all links"
 ```
 
 ### Flags

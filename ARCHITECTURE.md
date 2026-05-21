@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `6b4ef8d`
+**Verified against:** commit `df4372d`
 
 ---
 
@@ -26,10 +26,12 @@ cmd/cas/main.go          Entry point. Wires store → shell → TUI and starts
 internal/
   intent/     detect.go  Zero-latency regex classifier. Fires before any LLM
                          call. Maps a user message to a Kind and workspace type.
-  agent/      agent.go    Named sub-agents with per-agent contracts. Four agents:
+  agent/      agent.go    Named sub-agents with per-agent contracts. Six agents:
                          GenerationAgent (create), EditAgent (edit), CombineAgent (combine),
-                         ChatAgent (chat). Shell delegates to agents; agents own every LLM call.
-                         Shell has no remaining LLM call sites — it only routes.
+                         ChatAgent (chat), MCPAgent (mcp tool calls), WebAgent (web actions).
+                         Shell delegates to agents; agents own every LLM call.
+              mcp_agent.go  MCPAgent: tool-call planning + execution, autonomy dial.
+              web_agent.go  WebAgent: web action planning (answer/navigate/extract), autonomy dial.
   contract/   contract.go  Design by Contract enforcement. Pre/post/invariant
                          checks on workspace operations. Fail-closed.
   workspace/  workspace.go  Workspace type and lifecycle (create, update, close,
@@ -50,7 +52,11 @@ internal/
                          *.lua. Sandboxed VM; no file I/O, no network.
   conductor/  conductor.go  Behavioral learning. Observes interactions, builds
                          ~/.cas/profile.json, injects context into LLM prompts.
-  mcp/                   MCP integration layer (in progress).
+  mcp/        client.go  MCP client layer. Connect(), discoverTools(), Call(), Close().
+                         SSE transport via mark3labs/mcp-go.
+  webview/    browser.go HTTP fetch + golang.org/x/net/html parser.
+                         NewSession(), Navigate(), Fetch(), FormatPageState().
+                         Extracts title, headings, links, body text; no browser runtime.
 
 ui/           model.go   Bubble Tea TUI model. Renders chat + workspace panels,
                          handles keyboard, streams tokens into workspace view.
@@ -89,6 +95,18 @@ intent.Detect()               ← regex only, no LLM call, no latency
      │                   llm.Stream()
      │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB
      │                   workspace.Create()
+     │
+     ├─ KindIngest  →  MCPAgent (bound to workspace)
+     │                   contract.CheckPreconditions()   ← instruction, connection, tools, autonomy
+     │                   llm.Complete() → tool selection
+     │                   contract.CheckPostconditions()  ← tool name exists on server
+     │                   mcp.Connection.Call()  (if autonomy ≠ suggest)
+     │
+     ├─ KindBrowse  →  WebAgent (bound to workspace)
+     │                   contract.CheckPreconditions()   ← instruction, session, page state, autonomy
+     │                   llm.Complete() → action selection (answer/navigate/extract)
+     │                   contract.CheckPostconditions()  ← navigate_url valid if set
+     │                   webview.Session.Fetch()  (if action = navigate)
      │
      └─ KindChat    →  ChatAgent
                          contract.CheckPreconditions()   ← message non-empty, history ≤ 20 turns
@@ -134,9 +152,19 @@ Per-agent contract rules:
 | EditAgent         | wsType valid, content non-empty, request non-empty | result non-empty, ≤ 512 KB, ≥ 10% of original        |
 | CombineAgent      | ≥ 2 sources, all sources non-empty                 | result non-empty, ≤ 512 KB                            |
 | ChatAgent         | message non-empty, history ≤ 20 turns              | reply guaranteed (fallback applied before check)      |
+| MCPAgent          | instruction non-empty, connection present, ≥1 tool, autonomy valid | selected tool name exists on server    |
+| WebAgent          | instruction non-empty, session present, page state present, autonomy valid | navigate_url (if set) is absolute |
 
 The 10% truncation guard on EditAgent catches cases where the model returns
 only a fragment of the updated document instead of the full content.
+
+**Autonomy dial** (MCPAgent and WebAgent):
+
+| Value     | Behaviour                                                        |
+|-----------|------------------------------------------------------------------|
+| `suggest` | LLM plans the action; tool/navigation not executed              |
+| `confirm` | Action executed; result surfaced before continuing              |
+| `run`     | Action executed freely within workspace scope                   |
 
 ChatAgent's postcondition is a guarantee rather than a hard check — if the
 model returns an empty reply, the fallback nudge is substituted before the
