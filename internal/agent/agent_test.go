@@ -7,6 +7,7 @@ import (
 
 	"github.com/goweft/cas/internal/agent"
 	mcpclient "github.com/goweft/cas/internal/mcp"
+	"github.com/goweft/cas/internal/webview"
 	"github.com/goweft/cas/internal/llm"
 )
 
@@ -286,4 +287,76 @@ func contains(s, sub string) bool {
 			}
 			return false
 		}())
+}
+
+// ── WebAgent ──────────────────────────────────────────────────────
+
+func TestWebAgentContractEmptyInstruction(t *testing.T) {
+	a := agent.NewWebAgent()
+	sess, _ := webview.NewSession(nil, "https://example.com")
+	page := &webview.PageState{URL: "https://example.com", Title: "Test"}
+	_, err := a.Act(context.Background(), agent.WebRequest{
+		Instruction: "  ",
+		Session:     sess,
+		PageState:   page,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for empty instruction, got nil")
+	}
+	if !strings.Contains(err.Error(), "instruction_not_empty") {
+		t.Errorf("expected instruction_not_empty violation, got: %v", err)
+	}
+}
+
+func TestWebAgentContractNilSession(t *testing.T) {
+	a := agent.NewWebAgent()
+	page := &webview.PageState{URL: "https://example.com"}
+	_, err := a.Act(context.Background(), agent.WebRequest{
+		Instruction: "summarise this page",
+		Session:     nil,
+		PageState:   page,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for nil session, got nil")
+	}
+	if !strings.Contains(err.Error(), "session_present") {
+		t.Errorf("expected session_present violation, got: %v", err)
+	}
+}
+
+func TestWebAgentContractNilPageState(t *testing.T) {
+	a := agent.NewWebAgent()
+	sess, _ := webview.NewSession(nil, "https://example.com")
+	_, err := a.Act(context.Background(), agent.WebRequest{
+		Instruction: "summarise this page",
+		Session:     sess,
+		PageState:   nil,
+		Autonomy:    agent.AutonomySuggest,
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for nil page state, got nil")
+	}
+	if !strings.Contains(err.Error(), "page_state_present") {
+		t.Errorf("expected page_state_present violation, got: %v", err)
+	}
+}
+
+func TestWebAgentContractInvalidAutonomy(t *testing.T) {
+	a := agent.NewWebAgent()
+	sess, _ := webview.NewSession(nil, "https://example.com")
+	page := &webview.PageState{URL: "https://example.com"}
+	_, err := a.Act(context.Background(), agent.WebRequest{
+		Instruction: "summarise",
+		Session:     sess,
+		PageState:   page,
+		Autonomy:    agent.Autonomy("turbo"),
+	})
+	if err == nil {
+		t.Fatal("expected contract violation for invalid autonomy, got nil")
+	}
+	if !strings.Contains(err.Error(), "autonomy_valid") {
+		t.Errorf("expected autonomy_valid violation, got: %v", err)
+	}
 }

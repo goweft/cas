@@ -25,6 +25,7 @@ const (
 	KindPlugin  Kind = "plugin_command"
 	KindCombine Kind = "combine_workspaces"
 	KindIngest  Kind = "ingest_mcp"
+	KindBrowse  Kind = "browse_web"
 )
 
 // WSType is the workspace type inferred from the message.
@@ -71,8 +72,10 @@ var closePatterns []*regexp.Regexp
 var runPatterns []*regexp.Regexp
 var combinePatterns []*regexp.Regexp
 var ingestPatterns []*regexp.Regexp
+var browsePatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
 var ingestURLRe *regexp.Regexp
+var browseURLRe *regexp.Regexp
 
 func init() {
 	ci := regexp.MustCompile // alias for readability
@@ -144,10 +147,22 @@ func init() {
 		ci(`(?i)^add\s+(mcp\s+)?(server|source)\s+(https?://\S+)`),
 	}
 
+	browsePatterns = []*regexp.Regexp{
+		ci(`(?i)^browse\s+(https?://\S+)`),
+		ci(`(?i)^open\s+(https?://\S+)`),
+		ci(`(?i)^scrape\s+(https?://\S+)`),
+		ci(`(?i)^fetch\s+(https?://\S+)`),
+		ci(`(?i)^read\s+(https?://\S+)`),
+		ci(`(?i)^summarise\s+(https?://\S+)`),
+		ci(`(?i)^summarize\s+(https?://\S+)`),
+		ci(`(?i)^go\s+to\s+(https?://\S+)`),
+	}
+
 	titleHintRe = regexp.MustCompile(
 		`(?i)\b(?:write|draft|create|make|start|begin|compose)\s+(?:me\s+)?(?:a|an|the|my|our)?\s*(.+)`,
 	)
 	ingestURLRe = regexp.MustCompile(`(?i)(?:ingest|connect(?:\s+to)?|add\s+(?:mcp\s+)?(?:server|source))\s+(https?://\S+)`)
+	browseURLRe = regexp.MustCompile(`(?i)(?:browse|open|scrape|fetch|read|summarise|summarize|go\s+to)\s+(https?://\S+)`)
 }
 
 // Detect classifies a user message and returns an Intent.
@@ -156,6 +171,11 @@ func Detect(message string) Intent {
 	for _, re := range ingestPatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindIngest, WSType: WSType("mcp"), TitleHint: extractIngestURL(message)}
+		}
+	}
+	for _, re := range browsePatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindBrowse, WSType: WSType("web"), TitleHint: extractBrowseURL(message)}
 		}
 	}
 	for _, re := range closePatterns {
@@ -243,6 +263,13 @@ func titleCase(words []string) string {
 
 func extractIngestURL(message string) string {
 	m := ingestURLRe.FindStringSubmatch(message)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+func extractBrowseURL(message string) string {
+	m := browseURLRe.FindStringSubmatch(message)
 	if len(m) < 2 {
 		return ""
 	}

@@ -293,3 +293,48 @@ func TestIngestDoesNotMatchNormal(t *testing.T) {
 		})
 	}
 }
+
+func TestBrowseDetection(t *testing.T) {
+	cases := []struct {
+		message string
+		wantURL string
+	}{
+		{"browse https://example.com", "https://example.com"},
+		{"open https://golang.org", "https://golang.org"},
+		{"scrape https://news.ycombinator.com", "https://news.ycombinator.com"},
+		{"fetch https://api.example.com/data", "https://api.example.com/data"},
+		{"read https://docs.example.com/guide", "https://docs.example.com/guide"},
+		{"summarise https://example.com/article", "https://example.com/article"},
+		{"summarize https://example.com/article", "https://example.com/article"},
+		{"go to https://example.com/page", "https://example.com/page"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != intent.KindBrowse {
+				t.Errorf("Detect(%q) = %q, want KindBrowse", tc.message, got.Kind)
+			}
+			if got.TitleHint != tc.wantURL {
+				t.Errorf("Detect(%q).TitleHint = %q, want %q", tc.message, got.TitleHint, tc.wantURL)
+			}
+		})
+	}
+}
+
+func TestBrowseDoesNotMatchNormal(t *testing.T) {
+	cases := []string{
+		"write a document",
+		"open a new file",     // no URL
+		"fetch some data",     // no URL
+		"read the report",     // no URL
+		"go to sleep",         // no URL
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			got := intent.Detect(msg)
+			if got.Kind == intent.KindBrowse {
+				t.Errorf("Detect(%q) should not be KindBrowse", msg)
+			}
+		})
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/goweft/cas/internal/agent"
 	"github.com/goweft/cas/internal/conductor"
 	casmc "github.com/goweft/cas/internal/mcp"
+	"github.com/goweft/cas/internal/webview"
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
 	"github.com/goweft/cas/internal/store"
@@ -72,8 +73,11 @@ type Shell struct {
 	editAgent  *agent.EditAgent
 	combAgent  *agent.CombineAgent
 	chatAgent  *agent.ChatAgent
-	mcpAgent   *agent.MCPAgent
-	mcpConns   map[string]*casmc.Connection // wsID → connection
+	mcpAgent    *agent.MCPAgent
+	mcpConns    map[string]*casmc.Connection  // wsID → connection
+	webAgent    *agent.WebAgent
+	webSessions map[string]*webview.Session    // wsID → session
+	webPages    map[string]*webview.PageState  // wsID → current page
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -93,8 +97,11 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
 		chatAgent:  agent.NewChatAgent(),
-		mcpAgent:   agent.NewMCPAgent(),
-		mcpConns:   make(map[string]*casmc.Connection),
+		mcpAgent:    agent.NewMCPAgent(),
+		mcpConns:    make(map[string]*casmc.Connection),
+		webAgent:    agent.NewWebAgent(),
+		webSessions: make(map[string]*webview.Session),
+		webPages:    make(map[string]*webview.PageState),
 	}
 	sh.plugins.Load()
 	return sh
@@ -113,8 +120,11 @@ func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell 
 		editAgent:  agent.NewEditAgent(),
 		combAgent:  agent.NewCombineAgent(),
 		chatAgent:  agent.NewChatAgent(),
-		mcpAgent:   agent.NewMCPAgent(),
-		mcpConns:   make(map[string]*casmc.Connection),
+		mcpAgent:    agent.NewMCPAgent(),
+		mcpConns:    make(map[string]*casmc.Connection),
+		webAgent:    agent.NewWebAgent(),
+		webSessions: make(map[string]*webview.Session),
+		webPages:    make(map[string]*webview.PageState),
 	}
 	sh.plugins.Load()
 	return sh
@@ -220,6 +230,8 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		resp, err = sh.handleCombine(ctx, sess, message)
 	case intent.KindIngest:
 		resp, err = sh.handleIngest(ctx, sess, in)
+	case intent.KindBrowse:
+		resp, err = sh.handleBrowse(ctx, sess, in)
 	default:
 		resp, err = sh.handleChat(ctx, sess, message)
 	}
@@ -290,6 +302,12 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 		resp, err = sh.streamCombine(ctx, sess, message, onToken)
 	case intent.KindIngest:
 		r, e := sh.handleIngest(ctx, sess, in)
+		if e != nil {
+			return nil, e
+		}
+		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
+	case intent.KindBrowse:
+		r, e := sh.handleBrowse(ctx, sess, in)
 		if e != nil {
 			return nil, e
 		}
@@ -698,6 +716,90 @@ func formatMCPWorkspace(conn *casmc.Connection) string {
 		sb.WriteString("_(no tools discovered)_\n")
 	}
 	return sb.String()
+}
+
+// handleBrowse fetches a URL and materializes it as a web workspace.
+func (sh *Shell) handleBrowse(ctx context.Context, sess *Session, in intent.Intent) (*Response, error) {
+	pageURL := in.TitleHint
+	if pageURL == "" {
+		return &Response{ChatReply: "No URL found. Usage: browse <url>", Intent: intent.KindBrowse}, nil
+	}
+
+	webSess, err := webview.NewSession(ctx, pageURL)
+	if err != nil {
+		return &Response{
+			ChatReply: fmt.Sprintf("Failed to create session for %s: %v", pageURL, err),
+			Intent:    intent.KindBrowse,
+		}, nil
+	}
+
+	page, err := webSess.Navigate(ctx)
+	if err != nil {
+		webSess.Close()
+		return &Response{
+			ChatReply: fmt.Sprintf("Failed to fetch %s: %v", pageURL, err),
+			Intent:    intent.KindBrowse,
+		}, nil
+	}
+
+	title := page.Title
+	if title == "" {
+		title = pageURL
+	}
+	wsTitle := "Web: " + title
+	if len(wsTitle) > 64 {
+		wsTitle = wsTitle[:61] + "..."
+	}
+
+	content := webview.FormatPageState(page)
+	ws, err := sh.workspaces.Create(newID(), "web", wsTitle, content, sess.ID)
+	if err != nil {
+		webSess.Close()
+		return nil, err
+	}
+
+	sh.webSessions[ws.ID] = webSess
+	sh.webPages[ws.ID] = page
+
+	reply := fmt.Sprintf("Loaded %s — %d headings, %d links found.", title, len(page.Headings), len(page.Links))
+	return &Response{ChatReply: reply, Workspace: ws, Intent: intent.KindBrowse}, nil
+}
+
+// HandleWebAction executes a user instruction against a web workspace.
+func (sh *Shell) HandleWebAction(ctx context.Context, wsID, instruction string, autonomy agent.Autonomy) (*agent.WebResult, error) {
+	sess, ok := sh.webSessions[wsID]
+	if !ok {
+		return nil, fmt.Errorf("no web session for workspace %q", wsID)
+	}
+	page, ok := sh.webPages[wsID]
+	if !ok {
+		return nil, fmt.Errorf("no page state for workspace %q", wsID)
+	}
+	result, err := sh.webAgent.Act(ctx, agent.WebRequest{
+		Instruction: instruction,
+		Session:     sess,
+		PageState:   page,
+		Autonomy:    autonomy,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.3,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// If the agent navigated, update the stored page state
+	if result.NewPage != nil {
+		sh.webPages[wsID] = result.NewPage
+	}
+	return result, nil
+}
+
+// CloseWebWorkspace cleans up a web session when its workspace is closed.
+func (sh *Shell) CloseWebWorkspace(wsID string) {
+	if sess, ok := sh.webSessions[wsID]; ok {
+		sess.Close()
+		delete(sh.webSessions, wsID)
+	}
+	delete(sh.webPages, wsID)
 }
 
 // crossWorkspaceRefs finds workspaces referenced in the message other than the target.
