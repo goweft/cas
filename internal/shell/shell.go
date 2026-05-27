@@ -804,7 +804,7 @@ func (sh *Shell) HandleWebAction(ctx context.Context, wsID, instruction string, 
 	return result, nil
 }
 
-// handleOrchestrate coordinates a multi-workspace task.
+// handleOrchestrate coordinates a multi-workspace task and persists the run log.
 func (sh *Shell) handleOrchestrate(ctx context.Context, sess *Session, message string) (*Response, error) {
 	active := sh.workspaces.Active()
 	if len(active) < 2 {
@@ -831,10 +831,18 @@ func (sh *Shell) handleOrchestrate(ctx context.Context, sess *Session, message s
 		wsInfos[i] = info
 	}
 
+	// Create a run ID and a logging executor before starting.
+	runID := newID()
+	loggingExec := &loggingExecutor{
+		inner: sh,
+		store: sh.store,
+		runID: runID,
+	}
+
 	result, err := sh.orchestAgent.Orchestrate(ctx, agent.OrchestratorRequest{
 		Instruction: message,
 		Workspaces:  wsInfos,
-		Executor:    sh,
+		Executor:    loggingExec,
 		Autonomy:    agent.AutonomyRun,
 		UserContext: sh.conductor.UserContext(),
 		Temperature: 0.3,
@@ -843,7 +851,48 @@ func (sh *Shell) handleOrchestrate(ctx context.Context, sess *Session, message s
 		return nil, err
 	}
 
+	// Persist the run record.
+	run := store.OrchestrationRunRow{
+		ID:          runID,
+		SessionID:   sess.ID,
+		Instruction: message,
+		Summary:     result.Summary,
+		StepCount:   len(result.Plan.Steps),
+		CreatedAt:   time.Now().UTC(),
+	}
+	if err := sh.store.SaveOrchestrationRun(run); err != nil {
+		// Non-fatal: log and continue.
+		_ = err
+	}
+
 	return &Response{ChatReply: result.Summary, Intent: intent.KindOrchestrate}, nil
+}
+
+// loggingExecutor wraps the shell's ExecuteStep and persists each step as it runs.
+type loggingExecutor struct {
+	inner     agent.StepExecutor
+	store     store.Store
+	runID     string
+	stepCount int
+}
+
+func (e *loggingExecutor) ExecuteStep(ctx context.Context, wsID, instruction, priorContext string) (string, error) {
+	e.stepCount++
+	output, err := e.inner.ExecuteStep(ctx, wsID, instruction, priorContext)
+	if err != nil {
+		return "", err
+	}
+	step := store.OrchestrationStepRow{
+		ID:          newID(),
+		RunID:       e.runID,
+		StepNumber:  e.stepCount,
+		WorkspaceID: wsID,
+		Instruction: instruction,
+		Output:      output,
+	}
+	// Non-fatal if persistence fails.
+	_ = e.store.SaveOrchestrationStep(step)
+	return output, nil
 }
 
 // ExecuteStep implements agent.StepExecutor.

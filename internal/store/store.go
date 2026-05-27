@@ -39,6 +39,26 @@ type HistoryRow struct {
 	SavedAt     time.Time
 }
 
+// OrchestrationRunRow records a completed orchestration task.
+type OrchestrationRunRow struct {
+	ID          string
+	SessionID   string
+	Instruction string
+	Summary     string
+	StepCount   int
+	CreatedAt   time.Time
+}
+
+// OrchestrationStepRow records a single step within an orchestration run.
+type OrchestrationStepRow struct {
+	ID          string
+	RunID       string
+	StepNumber  int
+	WorkspaceID string
+	Instruction string
+	Output      string
+}
+
 // Store is the persistence interface for CAS.
 // Implemented by SQLiteStore and MemoryStore.
 type Store interface {
@@ -61,6 +81,13 @@ type Store interface {
 	GetVersion(workspaceID string, version int) (*HistoryRow, error)
 	Undo(workspaceID string) (*HistoryRow, error)
 	ApplyVersion(workspaceID string, version int) error
+
+
+	// Orchestration runs
+	SaveOrchestrationRun(run OrchestrationRunRow) error
+	SaveOrchestrationStep(step OrchestrationStepRow) error
+	LoadOrchestrationRuns(sessionID string) ([]OrchestrationRunRow, error)
+	LoadOrchestrationSteps(runID string) ([]OrchestrationStepRow, error)
 
 	Close() error
 }

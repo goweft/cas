@@ -10,17 +10,20 @@ import (
 )
 
 type MemoryStore struct {
-	mu         sync.Mutex
-	sessions   []SessionRow
-	messages   []MessageRow
-	workspaces map[string]*WorkspaceRow
-	history    map[string][]HistoryRow // workspaceID → versions
+	mu              sync.Mutex
+	sessions        []SessionRow
+	messages        []MessageRow
+	workspaces      map[string]*WorkspaceRow
+	history         map[string][]HistoryRow         // workspaceID → versions
+	orchRuns        []OrchestrationRunRow
+	orchSteps       map[string][]OrchestrationStepRow // runID → steps
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		workspaces: make(map[string]*WorkspaceRow),
 		history:    make(map[string][]HistoryRow),
+		orchSteps:  make(map[string][]OrchestrationStepRow),
 	}
 }
 
@@ -163,6 +166,41 @@ func (m *MemoryStore) ApplyVersion(workspaceID string, version int) error {
 		}
 	}
 	return fmt.Errorf("version %d not found for workspace %s", version, workspaceID)
+}
+
+func (m *MemoryStore) SaveOrchestrationRun(run OrchestrationRunRow) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.orchRuns = append(m.orchRuns, run)
+	return nil
+}
+
+func (m *MemoryStore) SaveOrchestrationStep(step OrchestrationStepRow) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.orchSteps[step.RunID] = append(m.orchSteps[step.RunID], step)
+	return nil
+}
+
+func (m *MemoryStore) LoadOrchestrationRuns(sessionID string) ([]OrchestrationRunRow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []OrchestrationRunRow
+	for _, r := range m.orchRuns {
+		if r.SessionID == sessionID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (m *MemoryStore) LoadOrchestrationSteps(runID string) ([]OrchestrationStepRow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	steps := m.orchSteps[runID]
+	out := make([]OrchestrationStepRow, len(steps))
+	copy(out, steps)
+	return out, nil
 }
 
 func (m *MemoryStore) Close() error { return nil }

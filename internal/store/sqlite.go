@@ -101,6 +101,15 @@ func (s *SQLiteStore) migrate() error {
 		}
 	}
 
+	if schemaVersion < 2 {
+		if err := s.migrateAddOrchestration(); err != nil {
+			return fmt.Errorf("migration v2: %w", err)
+		}
+		if _, err := s.db.Exec(`PRAGMA user_version = 2`); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -390,6 +399,94 @@ func (s *SQLiteStore) ApplyVersion(workspaceID string, version int) error {
 	}
 	_, err = s.db.Exec(`UPDATE workspaces SET title=?, content=? WHERE id=?`, r.Title, r.Content, workspaceID)
 	return err
+}
+
+// migrateAddOrchestration creates the orchestration_runs and orchestration_steps tables.
+func (s *SQLiteStore) migrateAddOrchestration() error {
+	_, err := s.db.Exec(`
+	CREATE TABLE IF NOT EXISTS orchestration_runs (
+		id          TEXT PRIMARY KEY,
+		session_id  TEXT NOT NULL,
+		instruction TEXT NOT NULL,
+		summary     TEXT NOT NULL DEFAULT '',
+		step_count  INTEGER NOT NULL DEFAULT 0,
+		created_at  TEXT NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS orchestration_steps (
+		id           TEXT PRIMARY KEY,
+		run_id       TEXT NOT NULL REFERENCES orchestration_runs(id),
+		step_number  INTEGER NOT NULL,
+		workspace_id TEXT NOT NULL,
+		instruction  TEXT NOT NULL,
+		output       TEXT NOT NULL DEFAULT ''
+	);
+	CREATE INDEX IF NOT EXISTS idx_orch_runs_session ON orchestration_runs(session_id);
+	CREATE INDEX IF NOT EXISTS idx_orch_steps_run ON orchestration_steps(run_id);
+	`)
+	return err
+}
+
+func (s *SQLiteStore) SaveOrchestrationRun(run OrchestrationRunRow) error {
+	_, err := s.db.Exec(
+		`INSERT INTO orchestration_runs (id, session_id, instruction, summary, step_count, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		run.ID, run.SessionID, run.Instruction, run.Summary, run.StepCount,
+		run.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	)
+	return err
+}
+
+func (s *SQLiteStore) SaveOrchestrationStep(step OrchestrationStepRow) error {
+	_, err := s.db.Exec(
+		`INSERT INTO orchestration_steps (id, run_id, step_number, workspace_id, instruction, output)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		step.ID, step.RunID, step.StepNumber, step.WorkspaceID, step.Instruction, step.Output,
+	)
+	return err
+}
+
+func (s *SQLiteStore) LoadOrchestrationRuns(sessionID string) ([]OrchestrationRunRow, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_id, instruction, summary, step_count, created_at
+		 FROM orchestration_runs WHERE session_id = ? ORDER BY created_at ASC`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OrchestrationRunRow
+	for rows.Next() {
+		var r OrchestrationRunRow
+		var createdAt string
+		if err := rows.Scan(&r.ID, &r.SessionID, &r.Instruction, &r.Summary, &r.StepCount, &createdAt); err != nil {
+			return nil, err
+		}
+		r.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z", createdAt)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) LoadOrchestrationSteps(runID string) ([]OrchestrationStepRow, error) {
+	rows, err := s.db.Query(
+		`SELECT id, run_id, step_number, workspace_id, instruction, output
+		 FROM orchestration_steps WHERE run_id = ? ORDER BY step_number ASC`,
+		runID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OrchestrationStepRow
+	for rows.Next() {
+		var r OrchestrationStepRow
+		if err := rows.Scan(&r.ID, &r.RunID, &r.StepNumber, &r.WorkspaceID, &r.Instruction, &r.Output); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
