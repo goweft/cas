@@ -59,15 +59,16 @@ var (
 // ── Tab state ─────────────────────────────────────────────────────
 
 type tabState struct {
-	ws      *workspace.Workspace // nil while generating (placeholder)
-	title   string
-	wsType  string
-	content string // current content (may differ from ws.Content while editing)
-	scroll  int
+	ws        *workspace.Workspace // nil while generating (placeholder)
+	title     string
+	wsType    string
+	content   string // current content (may differ from ws.Content while editing)
+	scroll    int
+	connected bool   // false for mcp/web workspaces restored without live session
 }
 
 func tabFromWorkspace(ws *workspace.Workspace) tabState {
-	return tabState{ws: ws, title: ws.Title, wsType: ws.Type, content: ws.Content}
+	return tabState{ws: ws, title: ws.Title, wsType: ws.Type, content: ws.Content, connected: ws.Connected}
 }
 
 // ── Stream event ──────────────────────────────────────────────────
@@ -701,12 +702,14 @@ func (m Model) handleResponse(msg responseMsg) (Model, tea.Cmd) {
 				m.tabs[found].ws = ws
 				m.tabs[found].title = ws.Title
 				m.tabs[found].content = ws.Content
+				m.tabs[found].connected = ws.Connected
 				m.activeTab = found
 			} else if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].ws == nil {
 				m.tabs[m.activeTab].ws = ws
 				m.tabs[m.activeTab].title = ws.Title
 				m.tabs[m.activeTab].wsType = ws.Type
 				m.tabs[m.activeTab].content = ws.Content
+				m.tabs[m.activeTab].connected = ws.Connected
 			} else {
 				m.tabs = append(m.tabs, tabFromWorkspace(ws))
 				m.activeTab = len(m.tabs) - 1
@@ -858,11 +861,18 @@ func (m Model) renderTabBar(w int) string {
 		if tab.ws == nil {
 			title += "…"
 		}
-		label := fmt.Sprintf("[%s] %s", badge, title)
+		var label string
+		if tab.ws != nil && !tab.connected {
+			label = fmt.Sprintf("[!] %s", title)
+		} else {
+			label = fmt.Sprintf("[%s] %s", badge, title)
+		}
 
 		switch {
 		case i == m.activeTab && m.focus == FocusEdit:
 			parts = append(parts, styleTabEditing.Render(label))
+		case i == m.activeTab && tab.ws != nil && !tab.connected:
+			parts = append(parts, styleTabActive.Render(label))
 		case i == m.activeTab:
 			parts = append(parts, styleTabActive.Render(label))
 		default:
@@ -955,6 +965,14 @@ func (m Model) renderStatus() string {
 			styleDim.Render("ctrl+c: discard"),
 		}, "  │  ")
 	case FocusWorkspace:
+		if m.activeTab < len(m.tabs) && m.tabs[m.activeTab].ws != nil && !m.tabs[m.activeTab].connected {
+			return "  " + strings.Join([]string{
+				styleEditBadge.Render("DISCONNECTED"),
+				styleDim.Render("type 'reconnect' in chat to restore"),
+				styleDim.Render("tab: chat"),
+				styleDim.Render("ctrl+c: quit"),
+			}, "  │  ")
+		}
 		return "  " + strings.Join([]string{
 			styleDim.Render("[/]: tabs"),
 			styleDim.Render("e: edit"),

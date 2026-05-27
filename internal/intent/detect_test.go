@@ -375,3 +375,58 @@ func TestOrchestrateDoesNotMatchNormal(t *testing.T) {
 		})
 	}
 }
+
+func TestReconnectDetection(t *testing.T) {
+	cases := []struct {
+		message string
+	}{
+		{"reconnect"},
+		{"reconnect to the linear workspace"},
+		{"reconnect workspace"},
+		{"reconnect linear"},
+		{"re-connect"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.Kind != intent.KindReconnect {
+				t.Errorf("Detect(%q) = %q, want KindReconnect", tc.message, got.Kind)
+			}
+		})
+	}
+}
+
+func TestReconnectTitleHintExtraction(t *testing.T) {
+	cases := []struct {
+		message   string
+		wantHint  string
+	}{
+		{"reconnect to the linear workspace", "the linear workspace"},
+		{"reconnect linear", "linear"},
+		{"reconnect", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			got := intent.Detect(tc.message)
+			if got.TitleHint != tc.wantHint {
+				t.Errorf("Detect(%q).TitleHint = %q, want %q", tc.message, got.TitleHint, tc.wantHint)
+			}
+		})
+	}
+}
+
+func TestReconnectDoesNotMatchNormal(t *testing.T) {
+	cases := []string{
+		"connect to a server",     // no URL but not reconnect
+		"write a document",
+		"edit the notes",
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			got := intent.Detect(msg)
+			if got.Kind == intent.KindReconnect {
+				t.Errorf("Detect(%q) should not be KindReconnect", msg)
+			}
+		})
+	}
+}

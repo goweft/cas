@@ -180,3 +180,44 @@ func TestUndoOnNonexistentWorkspaceReturnsError(t *testing.T) {
 		t.Error("expected error for nonexistent workspace")
 	}
 }
+
+func TestConnectedFieldOnCreate(t *testing.T) {
+	m := newManager()
+	for _, wsType := range []string{"document", "code", "list", "mcp", "web"} {
+		ws, err := m.Create("ws-"+wsType, wsType, "Test", "content", "ses1")
+		if err != nil {
+			t.Fatalf("Create %s: %v", wsType, err)
+		}
+		if !ws.Connected {
+			t.Errorf("newly created %s workspace should be Connected=true", wsType)
+		}
+	}
+}
+
+func TestConnectedFieldOnRestore(t *testing.T) {
+	s := store.NewMemoryStore()
+	m1 := workspace.NewManager(s)
+	m1.Create("ws-doc", "document", "Doc", "content", "ses1")
+	m1.Create("ws-mcp", "mcp", "MCP", "# MCP Server", "ses1")
+	m1.Create("ws-web", "web", "Web", "# Page", "ses1")
+
+	m2 := workspace.NewManager(s)
+	if err := m2.Restore(); err != nil {
+		t.Fatal(err)
+	}
+
+	doc, _ := m2.Get("ws-doc")
+	if !doc.Connected {
+		t.Error("restored document workspace should be Connected=true")
+	}
+
+	mcp, _ := m2.Get("ws-mcp")
+	if mcp.Connected {
+		t.Error("restored mcp workspace should be Connected=false (no live session)")
+	}
+
+	web, _ := m2.Get("ws-web")
+	if web.Connected {
+		t.Error("restored web workspace should be Connected=false (no live session)")
+	}
+}

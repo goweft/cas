@@ -11,7 +11,10 @@
 //  7. Chat (default)
 package intent
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // Kind names the intent of a user message.
 type Kind string
@@ -27,6 +30,7 @@ const (
 	KindIngest  Kind = "ingest_mcp"
 	KindBrowse      Kind = "browse_web"
 	KindOrchestrate Kind = "orchestrate"
+	KindReconnect   Kind = "reconnect"
 )
 
 // WSType is the workspace type inferred from the message.
@@ -75,6 +79,7 @@ var combinePatterns []*regexp.Regexp
 var ingestPatterns []*regexp.Regexp
 var browsePatterns []*regexp.Regexp
 var orchestratePatterns []*regexp.Regexp
+var reconnectPatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
 var ingestURLRe *regexp.Regexp
 var browseURLRe *regexp.Regexp
@@ -149,6 +154,14 @@ func init() {
 		ci(`(?i)^add\s+(mcp\s+)?(server|source)\s+(https?://\S+)`),
 	}
 
+	reconnectPatterns = []*regexp.Regexp{
+		ci(`(?i)^reconnect$`),
+		ci(`(?i)^reconnect\s+.+`),
+		ci(`(?i)^reconnect\s+to\s+.+`),
+		ci(`(?i)^reconnect\s+workspace`),
+		ci(`(?i)^re-?connect`),
+	}
+
 	orchestratePatterns = []*regexp.Regexp{
 		// "using X, do Y" / "use X to do Y"
 		ci(`(?i)\busing\s+\S.+,\s*.+`),
@@ -185,6 +198,11 @@ func Detect(message string) Intent {
 	for _, re := range ingestPatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindIngest, WSType: WSType("mcp"), TitleHint: extractIngestURL(message)}
+		}
+	}
+	for _, re := range reconnectPatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindReconnect, TitleHint: extractReconnectTarget(message)}
 		}
 	}
 	for _, re := range orchestratePatterns {
@@ -293,4 +311,17 @@ func extractBrowseURL(message string) string {
 		return ""
 	}
 	return m[1]
+}
+
+func extractReconnectTarget(message string) string {
+	// "reconnect to <title>" → return <title>
+	// "reconnect <title>" → return <title>
+	// "reconnect" → return ""
+	msg := strings.TrimSpace(message)
+	for _, prefix := range []string{"reconnect to ", "reconnect to\t", "reconnect "} {
+		if len(msg) > len(prefix) && strings.EqualFold(msg[:len(prefix)], prefix) {
+			return strings.TrimSpace(msg[len(prefix):])
+		}
+	}
+	return ""
 }

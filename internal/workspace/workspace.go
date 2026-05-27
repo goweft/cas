@@ -13,12 +13,15 @@ import (
 // Workspace is a single live workspace instance.
 type Workspace struct {
 	ID        string
-	Type      string // "document" | "code" | "list"
+	Type      string // "document" | "code" | "list" | "mcp" | "web"
 	Title     string
 	Content   string
 	CreatedAt time.Time
 	ClosedAt  *time.Time
 	SessionID string
+	// Connected is false for mcp/web workspaces restored without a live session.
+	// Always true for document/code/list types.
+	Connected bool
 }
 
 func (w *Workspace) IsActive() bool { return w.ClosedAt == nil }
@@ -67,6 +70,8 @@ func (m *Manager) Restore() error {
 			CreatedAt: row.CreatedAt,
 			ClosedAt:  row.ClosedAt,
 			SessionID: row.SessionID,
+			// mcp and web workspaces restored from disk have no live session.
+			Connected: row.Type != "mcp" && row.Type != "web",
 		}
 		m.workspaces[ws.ID] = ws
 	}
@@ -75,6 +80,7 @@ func (m *Manager) Restore() error {
 
 // Create makes a new workspace, enforcing the contract before writing to store.
 func (m *Manager) Create(id, wsType, title, content, sessionID string) (*Workspace, error) {
+	// All freshly created workspaces start connected.
 	c := contract.DefaultWorkspaceContract(wsType, len(content))
 	if err := c.CheckPreconditions(); err != nil {
 		return nil, fmt.Errorf("create blocked by contract: %w", err)
@@ -87,6 +93,7 @@ func (m *Manager) Create(id, wsType, title, content, sessionID string) (*Workspa
 		Content:   content,
 		CreatedAt: time.Now().UTC(),
 		SessionID: sessionID,
+		Connected: true,
 	}
 
 	if err := c.CheckPostconditions(); err != nil {
