@@ -73,9 +73,12 @@ func tabFromWorkspace(ws *workspace.Workspace) tabState {
 // ── Stream event ──────────────────────────────────────────────────
 
 type streamEvent struct {
-	Token string
-	Resp  *shell.StreamResponse
-	Err   error
+	Token   string
+	Resp    *shell.StreamResponse
+	Err     error
+	// Confirm fields — set when the executor needs user approval before acting.
+	ConfirmRequest string       // human-readable description of what will happen
+	ConfirmCh      chan<- bool  // send true to approve, false to skip
 }
 
 // ── Tea messages ──────────────────────────────────────────────────
@@ -95,6 +98,7 @@ const (
 	FocusChat      Focus = iota
 	FocusWorkspace Focus = iota
 	FocusEdit      Focus = iota // inline editing — textarea is active
+	FocusConfirm   Focus = iota // waiting for y/n on a confirm request
 )
 
 // ── Model ─────────────────────────────────────────────────────────
@@ -130,6 +134,10 @@ type Model struct {
 
 	// Status
 	status string
+
+	// Confirm-mode state (FocusConfirm)
+	confirmDescription string    // what action is pending
+	confirmCh          chan<- bool // send true/false to unblock the executor
 }
 
 // New creates a model seeded with existing session state.
@@ -198,6 +206,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case responseMsg:
 		return m.handleResponse(msg)
+	case ConfirmRequestMsg:
+		m.focus = FocusConfirm
+		m.confirmDescription = msg.Description
+		m.confirmCh = msg.Ch
+		m.status = ""
+		return m, listenStream(m.streamCh)
 	}
 
 	// Delegate to textarea in edit mode for non-key messages (paste, etc.)
@@ -218,6 +232,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyEsc:
+		if m.focus == FocusConfirm {
+			// Cancel — reject and abort
+			return m.resolveConfirm(false)
+		}
 		if m.focus == FocusWorkspace {
 			m.focus = FocusChat
 		} else {
@@ -234,6 +252,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
+		if m.focus == FocusConfirm {
+			// Enter in confirm mode = approve
+			return m.resolveConfirm(true)
+		}
 		if m.focus != FocusChat || m.streaming || strings.TrimSpace(m.input) == "" {
 			return m, nil
 		}
@@ -399,6 +421,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyRunes:
+		if m.focus == FocusConfirm {
+			switch strings.ToLower(string(msg.Runes)) {
+			case "y":
+				return m.resolveConfirm(true)
+			case "n":
+				return m.resolveConfirm(false)
+			}
+			return m, nil
+		}
 		if m.focus == FocusWorkspace {
 			switch string(msg.Runes) {
 			case "[":
@@ -563,6 +594,27 @@ func (m Model) submitMessage() (Model, tea.Cmd) {
 	sh := m.sh
 
 	go func() {
+		// For orchestration intents, use OrchestrateConfirm with a channel-based
+		// confirm function that pauses the goroutine and sends a confirmRequestMsg
+		// through the stream channel for the TUI to handle.
+		if in.Kind == intent.KindOrchestrate {
+			confirmFn := func(description string) bool {
+				respCh := make(chan bool, 1)
+				ch <- streamEvent{
+					ConfirmRequest: description,
+					ConfirmCh:      respCh,
+				}
+				return <-respCh // blocks until TUI resolves
+			}
+			resp, err := sh.OrchestrateConfirm(context.Background(), sessionID, message, confirmFn)
+			var streamResp *shell.StreamResponse
+			if resp != nil {
+				streamResp = &shell.StreamResponse{ChatReply: resp.ChatReply, Intent: resp.Intent}
+			}
+			ch <- streamEvent{Resp: streamResp, Err: err}
+			close(ch)
+			return
+		}
 		resp, err := sh.StreamMessage(
 			context.Background(), sessionID, message,
 			func(token string) { ch <- streamEvent{Token: token} },
@@ -574,6 +626,12 @@ func (m Model) submitMessage() (Model, tea.Cmd) {
 	return m, listenStream(ch)
 }
 
+// confirmRequestMsg arrives when an executor needs user approval.
+type ConfirmRequestMsg struct {
+	Description string
+	Ch          chan<- bool
+}
+
 func listenStream(ch chan streamEvent) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
@@ -583,8 +641,25 @@ func listenStream(ch chan streamEvent) tea.Cmd {
 		if ev.Resp != nil || ev.Err != nil {
 			return responseMsg{resp: ev.Resp, err: ev.Err}
 		}
+		if ev.ConfirmRequest != "" {
+			return ConfirmRequestMsg{Description: ev.ConfirmRequest, Ch: ev.ConfirmCh}
+		}
 		return tokenMsg(ev.Token)
 	}
+}
+
+// resolveConfirm sends the user's approval/rejection and returns to chat focus.
+func (m Model) resolveConfirm(approve bool) (tea.Model, tea.Cmd) {
+	if m.confirmCh != nil {
+		m.confirmCh <- approve
+		m.confirmCh = nil
+	}
+	m.confirmDescription = ""
+	m.focus = FocusChat
+	if !approve {
+		m.status = "step skipped"
+	}
+	return m, listenStream(m.streamCh)
 }
 
 func (m Model) handleResponse(msg responseMsg) (Model, tea.Cmd) {
@@ -860,6 +935,18 @@ func (m Model) renderStatus() string {
 	}
 
 	switch m.focus {
+	case FocusConfirm:
+		desc := m.confirmDescription
+		if len(desc) > 60 {
+			desc = desc[:57] + "..."
+		}
+		return "  " + strings.Join([]string{
+			styleEditBadge.Render("CONFIRM"),
+			styleDim.Render(desc),
+			styleDim.Render("y: proceed"),
+			styleDim.Render("n: skip"),
+			styleDim.Render("esc: cancel"),
+		}, "  │  ")
 	case FocusEdit:
 		return "  " + strings.Join([]string{
 			styleEditBadge.Render("EDITING"),
@@ -1060,3 +1147,6 @@ func clamp(v, lo, hi int) int {
 	}
 	return v
 }
+
+// ConfirmDescription returns the pending confirm description (for testing).
+func (m Model) ConfirmDescription() string { return m.confirmDescription }

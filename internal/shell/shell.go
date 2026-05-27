@@ -868,6 +868,58 @@ func (sh *Shell) handleOrchestrate(ctx context.Context, sess *Session, message s
 	return &Response{ChatReply: result.Summary, Intent: intent.KindOrchestrate}, nil
 }
 
+// OrchestrateConfirm runs orchestration with confirm-mode autonomy.
+// The confirmFn is called before each step; it blocks until the user approves or skips.
+// This is the entry point for the TUI confirm dial — the caller supplies the blocking function.
+func (sh *Shell) OrchestrateConfirm(ctx context.Context, sessID, message string, confirmFn ConfirmFunc) (*Response, error) {
+	active := sh.workspaces.Active()
+	if len(active) < 2 {
+		return sh.handleChat(ctx, &Session{ID: sessID}, message)
+	}
+
+	wsInfos := make([]agent.WorkspaceInfo, len(active))
+	for i, ws := range active {
+		info := agent.WorkspaceInfo{ID: ws.ID, Title: ws.Title, Type: ws.Type}
+		if conn, ok := sh.mcpConns[ws.ID]; ok {
+			info.ToolSummary = conn.ToolSummary()
+		}
+		if len(ws.Content) > 200 {
+			info.ContentSnip = ws.Content[:200]
+		} else {
+			info.ContentSnip = ws.Content
+		}
+		wsInfos[i] = info
+	}
+
+	runID := newID()
+	loggingExec := &loggingExecutor{inner: sh, store: sh.store, runID: runID}
+	exec := &confirmingExecutor{inner: loggingExec, confirm: confirmFn}
+
+	result, err := sh.orchestAgent.Orchestrate(ctx, agent.OrchestratorRequest{
+		Instruction: message,
+		Workspaces:  wsInfos,
+		Executor:    exec,
+		Autonomy:    agent.AutonomyConfirm,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.3,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	run := store.OrchestrationRunRow{
+		ID:          runID,
+		SessionID:   sessID,
+		Instruction: message,
+		Summary:     result.Summary,
+		StepCount:   len(result.Plan.Steps),
+		CreatedAt:   time.Now().UTC(),
+	}
+	_ = sh.store.SaveOrchestrationRun(run)
+
+	return &Response{ChatReply: result.Summary, Intent: intent.KindOrchestrate}, nil
+}
+
 // loggingExecutor wraps the shell's ExecuteStep and persists each step as it runs.
 type loggingExecutor struct {
 	inner     agent.StepExecutor
@@ -893,6 +945,29 @@ func (e *loggingExecutor) ExecuteStep(ctx context.Context, wsID, instruction, pr
 	// Non-fatal if persistence fails.
 	_ = e.store.SaveOrchestrationStep(step)
 	return output, nil
+}
+
+// ConfirmFunc is called before each step in confirm-autonomy orchestration.
+// It should block until the user responds and return true to proceed or false to skip.
+// The UI wires this to the FocusConfirm TUI state.
+type ConfirmFunc func(description string) bool
+
+// confirmingExecutor wraps a loggingExecutor and pauses before each step for user approval.
+type confirmingExecutor struct {
+	inner   *loggingExecutor
+	confirm ConfirmFunc
+}
+
+func (e *confirmingExecutor) ExecuteStep(ctx context.Context, wsID, instruction, priorContext string) (string, error) {
+	desc := fmt.Sprintf("[%s] %s", wsID, instruction)
+	if len(desc) > 120 {
+		desc = desc[:117] + "..."
+	}
+	if !e.confirm(desc) {
+		// User skipped this step — return empty output and continue plan.
+		return "(skipped)", nil
+	}
+	return e.inner.ExecuteStep(ctx, wsID, instruction, priorContext)
 }
 
 // ExecuteStep implements agent.StepExecutor.

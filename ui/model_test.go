@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -427,5 +428,113 @@ func TestEditInMiddleOfLongInput(t *testing.T) {
 	m = typeString(m, "quick ")
 	if m.Input() != "the quick brown fox" {
 		t.Errorf("edit at middle failed: got %q", m.Input())
+	}
+}
+
+// ── Confirm-mode tests ────────────────────────────────────────────
+
+func TestConfirmModeEntersOnConfirmRequest(t *testing.T) {
+	respCh := make(chan bool, 1)
+	m := newTestModel(t)
+
+	updated, _ := m.Update(ui.ConfirmRequestMsg{
+		Description: "call list_issues on ws-linear",
+		Ch:          respCh,
+	})
+	um := updated.(ui.Model)
+
+	if um.CurrentFocus() != ui.FocusConfirm {
+		t.Errorf("expected FocusConfirm after ConfirmRequestMsg, got %v", um.CurrentFocus())
+	}
+	if um.ConfirmDescription() != "call list_issues on ws-linear" {
+		t.Errorf("ConfirmDescription = %q, want %q", um.ConfirmDescription(), "call list_issues on ws-linear")
+	}
+}
+
+func TestConfirmModeApproveWithY(t *testing.T) {
+	respCh := make(chan bool, 1)
+	m := newTestModel(t)
+
+	updated, _ := m.Update(ui.ConfirmRequestMsg{Description: "some action", Ch: respCh})
+	um := updated.(ui.Model)
+
+	updated2, _ := um.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	um2 := updated2.(ui.Model)
+
+	if um2.CurrentFocus() == ui.FocusConfirm {
+		t.Error("expected FocusConfirm to exit after y")
+	}
+	select {
+	case approved := <-respCh:
+		if !approved {
+			t.Error("expected true (approve) on channel, got false")
+		}
+	default:
+		t.Error("expected value on respCh after y, got nothing")
+	}
+}
+
+func TestConfirmModeRejectWithN(t *testing.T) {
+	respCh := make(chan bool, 1)
+	m := newTestModel(t)
+
+	updated, _ := m.Update(ui.ConfirmRequestMsg{Description: "some action", Ch: respCh})
+	um := updated.(ui.Model)
+
+	updated2, _ := um.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	um2 := updated2.(ui.Model)
+
+	if um2.CurrentFocus() == ui.FocusConfirm {
+		t.Error("expected FocusConfirm to exit after n")
+	}
+	select {
+	case approved := <-respCh:
+		if approved {
+			t.Error("expected false (reject) on channel, got true")
+		}
+	default:
+		t.Error("expected value on respCh after n, got nothing")
+	}
+}
+
+func TestConfirmModeCancelWithEsc(t *testing.T) {
+	respCh := make(chan bool, 1)
+	m := newTestModel(t)
+
+	updated, _ := m.Update(ui.ConfirmRequestMsg{Description: "some action", Ch: respCh})
+	um := updated.(ui.Model)
+
+	updated2, _ := um.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	um2 := updated2.(ui.Model)
+
+	if um2.CurrentFocus() == ui.FocusConfirm {
+		t.Error("expected FocusConfirm to exit after Esc")
+	}
+	select {
+	case approved := <-respCh:
+		if approved {
+			t.Error("expected false (cancel) on channel, got true")
+		}
+	default:
+		t.Error("expected value on respCh after Esc, got nothing")
+	}
+}
+
+func TestConfirmModeStatusBar(t *testing.T) {
+	respCh := make(chan bool, 1)
+	m := newTestModel(t)
+
+	updated, _ := m.Update(ui.ConfirmRequestMsg{
+		Description: "call create_pr on ws-github",
+		Ch:          respCh,
+	})
+	um := updated.(ui.Model)
+
+	view := um.View()
+	if !strings.Contains(view, "CONFIRM") {
+		t.Error("expected CONFIRM badge in view during FocusConfirm")
+	}
+	if !strings.Contains(view, "y: proceed") {
+		t.Error("expected y: proceed hint in confirm status bar")
 	}
 }
