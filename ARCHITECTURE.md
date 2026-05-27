@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `df4372d`
+**Verified against:** commit `3280533`
 
 ---
 
@@ -26,12 +26,15 @@ cmd/cas/main.go          Entry point. Wires store → shell → TUI and starts
 internal/
   intent/     detect.go  Zero-latency regex classifier. Fires before any LLM
                          call. Maps a user message to a Kind and workspace type.
-  agent/      agent.go    Named sub-agents with per-agent contracts. Six agents:
+  agent/      agent.go    Named sub-agents with per-agent contracts. Seven agents:
                          GenerationAgent (create), EditAgent (edit), CombineAgent (combine),
-                         ChatAgent (chat), MCPAgent (mcp tool calls), WebAgent (web actions).
+                         ChatAgent (chat), MCPAgent (mcp tool calls), WebAgent (web actions),
+                         OrchestratorAgent (multi-workspace coordination).
                          Shell delegates to agents; agents own every LLM call.
               mcp_agent.go  MCPAgent: tool-call planning + execution, autonomy dial.
               web_agent.go  WebAgent: web action planning (answer/navigate/extract), autonomy dial.
+              orchestrator.go  OrchestratorAgent: multi-workspace task coordination.
+                         plan → execute (via StepExecutor) → summarise.
   contract/   contract.go  Design by Contract enforcement. Pre/post/invariant
                          checks on workspace operations. Fail-closed.
   workspace/  workspace.go  Workspace type and lifecycle (create, update, close,
@@ -96,6 +99,13 @@ intent.Detect()               ← regex only, no LLM call, no latency
      │                   contract.CheckPostconditions()  ← non-empty, ≤512 KB
      │                   workspace.Create()
      │
+     ├─ KindOrchestrate → OrchestratorAgent
+     │                   contract.CheckPreconditions()   ← instruction, ≥2 workspaces, executor, autonomy
+     │                   llm.Complete() → step plan (workspace_id + instruction per step)
+     │                   contract.CheckPostconditions()  ← all step workspace_ids exist
+     │                   for each step: shell.ExecuteStep() → MCPAgent | WebAgent | EditAgent
+     │                   llm.Complete() → one-sentence summary
+     │
      ├─ KindIngest  →  MCPAgent (bound to workspace)
      │                   contract.CheckPreconditions()   ← instruction, connection, tools, autonomy
      │                   llm.Complete() → tool selection
@@ -154,6 +164,7 @@ Per-agent contract rules:
 | ChatAgent         | message non-empty, history ≤ 20 turns              | reply guaranteed (fallback applied before check)      |
 | MCPAgent          | instruction non-empty, connection present, ≥1 tool, autonomy valid | selected tool name exists on server    |
 | WebAgent          | instruction non-empty, session present, page state present, autonomy valid | navigate_url (if set) is absolute |
+| OrchestratorAgent | instruction non-empty, ≥2 workspaces with IDs, executor present, autonomy valid | plan has steps, all step workspace_ids exist |
 
 The 10% truncation guard on EditAgent catches cases where the model returns
 only a fragment of the updated document instead of the full content.

@@ -85,7 +85,7 @@ contract.CheckPostconditions()  // did the output meet requirements?
 
 Contracts run in Go, external to the model. The model cannot modify, bypass, or reason about them. Any violation fails the operation — fail-closed always. Based on Bertrand Meyer's Design by Contract (1988).
 
-Every LLM call is owned by a named agent (`GenerationAgent`, `EditAgent`, `CombineAgent`, `ChatAgent`, `MCPAgent`, `WebAgent`). Contracts are frozen before the LLM call and checked again after. The shell delegates to agents and has no remaining LLM call sites — it only routes.
+Every LLM call is owned by a named agent (`GenerationAgent`, `EditAgent`, `CombineAgent`, `ChatAgent`, `MCPAgent`, `WebAgent`, `OrchestratorAgent`). Contracts are frozen before the LLM call and checked again after. The shell delegates to agents and has no remaining LLM call sites — it only routes.
 
 `MCPAgent` and `WebAgent` operate under an **autonomy dial** (`suggest` / `confirm` / `run`) that governs whether actions are planned only, executed with confirmation, or executed freely within their workspace scope. The contract enforces that any tool or URL used exists on the bound server or page — the agent cannot reach outside its workspace.
 
@@ -217,9 +217,10 @@ Full terminal editor via `charmbracelet/bubbles` textarea. All standard cursor m
 ```
 internal/
 ├── intent/      Zero-latency intent detection — regex, no LLM call
-├── agent/       Six named sub-agents, each with a frozen contract
+├── agent/       Seven named sub-agents, each with a frozen contract
 │                GenerationAgent, EditAgent, CombineAgent, ChatAgent,
-│                MCPAgent (tool calls), WebAgent (web actions)
+│                MCPAgent (tool calls), WebAgent (web actions),
+│                OrchestratorAgent (multi-workspace coordination)
 │                Shell has no remaining LLM call sites — it only routes
 ├── contract/    Design by Contract enforcement, fail-closed
 ├── workspace/   Lifecycle: create, update, undo, close, restore
@@ -317,6 +318,15 @@ browse https://golang.org
 # "summarise the main sections"
 # "navigate to https://golang.org/doc/install"
 # "extract all links"
+```
+
+### Coordinate across workspaces
+
+```bash
+# With two ingested workspaces open (e.g. Linear + GitHub MCP servers):
+# "read the linear issue and open a github PR for it"
+# → OrchestratorAgent decomposes into steps, executes each in sequence,
+#   passes each step's output as context to the next
 ```
 
 ### Flags
