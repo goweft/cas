@@ -338,3 +338,40 @@ func TestBrowseDoesNotMatchNormal(t *testing.T) {
 		})
 	}
 }
+
+func TestOrchestrateDetection(t *testing.T) {
+	cases := []string{
+		"using the linear workspace, create a github PR",
+		"use the issues list to draft a PR description",
+		"from the linear issue and create a PR",
+		"take the issue and file a pull request",
+		"read the linear issue and update the PR draft",
+		"get the issue then create a PR",
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			got := intent.Detect(msg)
+			if got.Kind != intent.KindOrchestrate {
+				t.Errorf("Detect(%q) = %q, want KindOrchestrate", msg, got.Kind)
+			}
+		})
+	}
+}
+
+func TestOrchestrateDoesNotMatchNormal(t *testing.T) {
+	cases := []string{
+		"write a document",
+		"edit the proposal",
+		"combine the notes",
+		"what is the capital of France",
+		"use good grammar in this document",
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			got := intent.Detect(msg)
+			if got.Kind == intent.KindOrchestrate {
+				t.Errorf("Detect(%q) should not be KindOrchestrate", msg)
+			}
+		})
+	}
+}

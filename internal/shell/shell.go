@@ -75,9 +75,10 @@ type Shell struct {
 	chatAgent  *agent.ChatAgent
 	mcpAgent    *agent.MCPAgent
 	mcpConns    map[string]*casmc.Connection  // wsID → connection
-	webAgent    *agent.WebAgent
-	webSessions map[string]*webview.Session    // wsID → session
-	webPages    map[string]*webview.PageState  // wsID → current page
+	webAgent        *agent.WebAgent
+	webSessions     map[string]*webview.Session    // wsID → session
+	webPages        map[string]*webview.PageState  // wsID → current page
+	orchestAgent    *agent.OrchestratorAgent
 }
 
 // NewShell creates a Shell backed by the given store.
@@ -99,9 +100,10 @@ func NewShell(s store.Store, conductorPath ...string) *Shell {
 		chatAgent:  agent.NewChatAgent(),
 		mcpAgent:    agent.NewMCPAgent(),
 		mcpConns:    make(map[string]*casmc.Connection),
-		webAgent:    agent.NewWebAgent(),
-		webSessions: make(map[string]*webview.Session),
-		webPages:    make(map[string]*webview.PageState),
+		webAgent:        agent.NewWebAgent(),
+		webSessions:     make(map[string]*webview.Session),
+		webPages:        make(map[string]*webview.PageState),
+		orchestAgent:   agent.NewOrchestratorAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -122,9 +124,10 @@ func NewShellWithPlugins(s store.Store, conductorPath, pluginDir string) *Shell 
 		chatAgent:  agent.NewChatAgent(),
 		mcpAgent:    agent.NewMCPAgent(),
 		mcpConns:    make(map[string]*casmc.Connection),
-		webAgent:    agent.NewWebAgent(),
-		webSessions: make(map[string]*webview.Session),
-		webPages:    make(map[string]*webview.PageState),
+		webAgent:        agent.NewWebAgent(),
+		webSessions:     make(map[string]*webview.Session),
+		webPages:        make(map[string]*webview.PageState),
+		orchestAgent:   agent.NewOrchestratorAgent(),
 	}
 	sh.plugins.Load()
 	return sh
@@ -230,6 +233,8 @@ func (sh *Shell) ProcessMessage(ctx context.Context, sessionID, message string) 
 		resp, err = sh.handleCombine(ctx, sess, message)
 	case intent.KindIngest:
 		resp, err = sh.handleIngest(ctx, sess, in)
+	case intent.KindOrchestrate:
+		resp, err = sh.handleOrchestrate(ctx, sess, message)
 	case intent.KindBrowse:
 		resp, err = sh.handleBrowse(ctx, sess, in)
 	default:
@@ -302,6 +307,12 @@ func (sh *Shell) StreamMessage(ctx context.Context, sessionID, message string, o
 		resp, err = sh.streamCombine(ctx, sess, message, onToken)
 	case intent.KindIngest:
 		r, e := sh.handleIngest(ctx, sess, in)
+		if e != nil {
+			return nil, e
+		}
+		resp = &StreamResponse{ChatReply: r.ChatReply, Workspace: r.Workspace, Intent: r.Intent}
+	case intent.KindOrchestrate:
+		r, e := sh.handleOrchestrate(ctx, sess, message)
 		if e != nil {
 			return nil, e
 		}
@@ -791,6 +802,103 @@ func (sh *Shell) HandleWebAction(ctx context.Context, wsID, instruction string, 
 		sh.webPages[wsID] = result.NewPage
 	}
 	return result, nil
+}
+
+// handleOrchestrate coordinates a multi-workspace task.
+func (sh *Shell) handleOrchestrate(ctx context.Context, sess *Session, message string) (*Response, error) {
+	active := sh.workspaces.Active()
+	if len(active) < 2 {
+		// Fall through to chat if fewer than 2 workspaces are open
+		return sh.handleChat(ctx, sess, message)
+	}
+
+	// Build WorkspaceInfo for each active workspace
+	wsInfos := make([]agent.WorkspaceInfo, len(active))
+	for i, ws := range active {
+		info := agent.WorkspaceInfo{
+			ID:    ws.ID,
+			Title: ws.Title,
+			Type:  ws.Type,
+		}
+		if conn, ok := sh.mcpConns[ws.ID]; ok {
+			info.ToolSummary = conn.ToolSummary()
+		}
+		if len(ws.Content) > 200 {
+			info.ContentSnip = ws.Content[:200]
+		} else {
+			info.ContentSnip = ws.Content
+		}
+		wsInfos[i] = info
+	}
+
+	result, err := sh.orchestAgent.Orchestrate(ctx, agent.OrchestratorRequest{
+		Instruction: message,
+		Workspaces:  wsInfos,
+		Executor:    sh,
+		Autonomy:    agent.AutonomyRun,
+		UserContext: sh.conductor.UserContext(),
+		Temperature: 0.3,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{ChatReply: result.Summary, Intent: intent.KindOrchestrate}, nil
+}
+
+// ExecuteStep implements agent.StepExecutor.
+// Routes a single orchestration step to the appropriate agent based on workspace type.
+func (sh *Shell) ExecuteStep(ctx context.Context, wsID, instruction, priorContext string) (string, error) {
+	ws, err := sh.workspaces.Get(wsID)
+	if err != nil || ws == nil {
+		return "", fmt.Errorf("workspace %q not found", wsID)
+	}
+
+	// Prepend prior context to instruction if present
+	fullInstruction := instruction
+	if priorContext != "" {
+		fullInstruction = priorContext + "\n\n" + instruction
+	}
+
+	switch ws.Type {
+	case "mcp":
+		result, err := sh.HandleMCPAction(ctx, wsID, fullInstruction, agent.AutonomyRun)
+		if err != nil {
+			return "", err
+		}
+		if result.Output != "" {
+			return result.Output, nil
+		}
+		return result.Suggestion, nil
+	case "web":
+		result, err := sh.HandleWebAction(ctx, wsID, fullInstruction, agent.AutonomyRun)
+		if err != nil {
+			return "", err
+		}
+		if result.Answer != "" {
+			return result.Answer, nil
+		}
+		if result.NewPage != nil {
+			return result.NewPage.Text, nil
+		}
+		return "", nil
+	default:
+		// For document/code/list workspaces: use EditAgent to apply the instruction
+		result, err := sh.editAgent.Edit(ctx, agent.EditRequest{
+			WSType:         ws.Type,
+			Title:          ws.Title,
+			CurrentContent: ws.Content,
+			EditRequest:    fullInstruction,
+			UserContext:    sh.conductor.UserContext(),
+			Temperature:    0.3,
+		})
+		if err != nil {
+			return "", err
+		}
+		// Persist the edit
+		_, err = sh.workspaces.Update(wsID, ws.Title, result.Content)
+		return result.Content, err
+	}
 }
 
 // CloseWebWorkspace cleans up a web session when its workspace is closed.

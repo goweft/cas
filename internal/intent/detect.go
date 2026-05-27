@@ -25,7 +25,8 @@ const (
 	KindPlugin  Kind = "plugin_command"
 	KindCombine Kind = "combine_workspaces"
 	KindIngest  Kind = "ingest_mcp"
-	KindBrowse  Kind = "browse_web"
+	KindBrowse      Kind = "browse_web"
+	KindOrchestrate Kind = "orchestrate"
 )
 
 // WSType is the workspace type inferred from the message.
@@ -73,6 +74,7 @@ var runPatterns []*regexp.Regexp
 var combinePatterns []*regexp.Regexp
 var ingestPatterns []*regexp.Regexp
 var browsePatterns []*regexp.Regexp
+var orchestratePatterns []*regexp.Regexp
 var titleHintRe *regexp.Regexp
 var ingestURLRe *regexp.Regexp
 var browseURLRe *regexp.Regexp
@@ -147,6 +149,18 @@ func init() {
 		ci(`(?i)^add\s+(mcp\s+)?(server|source)\s+(https?://\S+)`),
 	}
 
+	orchestratePatterns = []*regexp.Regexp{
+		// "using X, do Y" / "use X to do Y"
+		ci(`(?i)\busing\s+\S.+,\s*.+`),
+		ci(`(?i)\buse\s+\S.+\s+to\s+`),
+		// "from X ... to Y" / "take X ... and ... Y"
+		ci(`(?i)\bfrom\s+the\s+\S.+\s+(and|to)\s+`),
+		ci(`(?i)\btake\s+(the\s+)?\S.+\s+and\s+`),
+		// "read X and ... Y" / "get X then Y"
+		ci(`(?i)\bread\s+the\s+\S.+\s+and\s+`),
+		ci(`(?i)\bget\s+(the\s+)?\S.+\s+then\s+`),
+	}
+
 	browsePatterns = []*regexp.Regexp{
 		ci(`(?i)^browse\s+(https?://\S+)`),
 		ci(`(?i)^open\s+(https?://\S+)`),
@@ -171,6 +185,11 @@ func Detect(message string) Intent {
 	for _, re := range ingestPatterns {
 		if re.MatchString(message) {
 			return Intent{Kind: KindIngest, WSType: WSType("mcp"), TitleHint: extractIngestURL(message)}
+		}
+	}
+	for _, re := range orchestratePatterns {
+		if re.MatchString(message) {
+			return Intent{Kind: KindOrchestrate}
 		}
 	}
 	for _, re := range browsePatterns {
