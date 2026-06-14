@@ -1,7 +1,7 @@
 # CAS Architecture
 
 **Last updated:** 2026-05-19
-**Verified against:** commit `3280533`
+**Verified against:** commit `aa5cc11`
 
 ---
 
@@ -118,6 +118,10 @@ intent.Detect()               ← regex only, no LLM call, no latency
      │                   contract.CheckPostconditions()  ← navigate_url valid if set
      │                   webview.Session.Fetch()  (if action = navigate)
      │
+     ├─ KindReconnect → shell.handleReconnect
+     │                   re-establishes a stale mcp/web session from the stored URL
+     │                   reconnectMCP / reconnectWeb → refresh content, Connected = true
+     │
      └─ KindChat    →  ChatAgent
                          contract.CheckPreconditions()   ← message non-empty, history ≤ 20 turns
                          llm.Stream()
@@ -169,12 +173,12 @@ Per-agent contract rules:
 The 10% truncation guard on EditAgent catches cases where the model returns
 only a fragment of the updated document instead of the full content.
 
-**Autonomy dial** (MCPAgent and WebAgent):
+**Autonomy dial** (MCPAgent, WebAgent, OrchestratorAgent):
 
 | Value     | Behaviour                                                        |
 |-----------|------------------------------------------------------------------|
 | `suggest` | LLM plans the action; tool/navigation not executed              |
-| `confirm` | Action executed; result surfaced before continuing              |
+| `confirm` | Action executed after user approval; surfaced via the TUI `FocusConfirm` state (y: proceed / n: skip / esc: cancel) |
 | `run`     | Action executed freely within workspace scope                   |
 
 ChatAgent's postcondition is a guarantee rather than a hard check — if the
@@ -187,17 +191,40 @@ postcondition runs, ensuring the contract is always satisfied.
 
 Single local SQLite database at `~/.cas/cas.db`. No remote component.
 
-The `Store` interface defines four concerns:
+The `Store` interface defines five concerns:
 
-| Concern    | Types                                              |
-|------------|----------------------------------------------------|
-| Sessions   | `SessionRow`                                       |
-| Messages   | `MessageRow`                                       |
-| Workspaces | `WorkspaceRow` (live), `HistoryRow` (versioned)    |
-| History    | Undo via `Undo()`, version replay via `ApplyVersion()` |
+| Concern        | Types                                              |
+|----------------|----------------------------------------------------|
+| Sessions       | `SessionRow`                                       |
+| Messages       | `MessageRow`                                       |
+| Workspaces     | `WorkspaceRow` (live), `HistoryRow` (versioned)    |
+| History        | Undo via `Undo()`, version replay via `ApplyVersion()` |
+| Orchestration  | `OrchestrationRunRow`, `OrchestrationStepRow`      |
 
 Two concrete implementations: `SQLiteStore` (production) and `MemoryStore`
 (tests). The interface makes them interchangeable.
+
+**Schema migrations** use `PRAGMA user_version` with explicit version gates.
+Existing databases upgrade automatically on next start:
+
+- **v1** — `messages.id` migrated from INTEGER to TEXT primary key
+- **v2** — `orchestration_runs` and `orchestration_steps` tables added,
+  indexed on `session_id` and `run_id` respectively
+
+Every orchestration run and its per-step inputs/outputs are persisted,
+making any multi-workspace task fully auditable and replayable via
+`LoadOrchestrationRuns(sessionID)` + `LoadOrchestrationSteps(runID)`.
+
+### Session recovery
+
+`mcp` and `web` workspaces hold a live runtime session (MCP connection,
+web fetch context) that is **not** persisted — only their last content
+snapshot is. On restart, `workspace.Restore()` sets `Workspace.Connected`
+to false for these types. The shell prepends a stale notice to their
+content, the TUI shows a `[!]` tab badge and a DISCONNECTED status hint,
+and the `reconnect` command re-establishes the session from the URL stored
+in the workspace content. `document`/`code`/`list` workspaces are always
+`Connected` since they have no runtime session.
 
 ---
 

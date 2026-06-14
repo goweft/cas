@@ -163,7 +163,7 @@ This feeds back into LLM system prompts automatically. More sessions → better 
 
 ### Persistence
 
-SQLite (WAL mode) at `~/.cas/cas.db`. Sessions, workspaces, and conversation history survive restarts. Previous workspaces restore as tabs on next launch. Full version history per workspace enables multi-step undo.
+SQLite (WAL mode) at `~/.cas/cas.db`. Sessions, workspaces, and conversation history survive restarts. Previous workspaces restore as tabs on next launch. Full version history per workspace enables multi-step undo. Orchestration runs and their per-step inputs/outputs are persisted for a complete audit trail. Schema migrations run automatically via `PRAGMA user_version`.
 
 ---
 
@@ -327,6 +327,20 @@ browse https://golang.org
 # "read the linear issue and open a github PR for it"
 # → OrchestratorAgent decomposes into steps, executes each in sequence,
 #   passes each step's output as context to the next
+```
+
+In confirm mode the TUI pauses before each step and prompts for approval
+(`y` proceed / `n` skip / `esc` cancel). Every run and its per-step
+inputs and outputs are persisted, so any multi-workspace task is fully
+auditable and replayable.
+
+### Reconnect a stale workspace
+
+```bash
+# After a restart, mcp/web workspaces show a [!] badge — their live
+# session ended but their content was preserved. To restore:
+reconnect              # reconnects the first disconnected workspace
+reconnect linear       # reconnects a workspace by title
 ```
 
 ### Flags
