@@ -13,11 +13,19 @@ import (
 	"github.com/goweft/cas/ui"
 )
 
+var version = "dev"
+
 func main() {
 	memFlag := flag.Bool("memory", false, "use in-memory store (no persistence)")
 	dbFlag := flag.String("db", store.DefaultPath(), "path to SQLite database")
 	providersFlag := flag.Bool("providers", false, "list configured providers and exit")
+	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("cas " + version)
+		return
+	}
 
 	if *providersFlag {
 		printProviders()

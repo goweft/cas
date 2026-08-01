@@ -243,6 +243,18 @@ cmd/cas/         Entry point: --db, --memory flags
 
 ## Quick Start
 
+### Install
+
+Download a prebuilt binary for Linux, macOS, or Windows from the
+[latest release](https://github.com/goweft/cas/releases/latest), or install
+with a Go toolchain:
+
+```bash
+go install github.com/goweft/cas/cmd/cas@latest
+```
+
+### Build from source
+
 ```bash
 git clone https://github.com/goweft/cas.git
 cd cas
