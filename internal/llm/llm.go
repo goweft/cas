@@ -20,10 +20,10 @@ import (
 type Provider string
 
 const (
-	ProviderOllama    Provider = "ollama"
-	ProviderAnthropic Provider = "anthropic"
-	ProviderGroq      Provider = "groq"
-	ProviderOpenAI    Provider = "openai"
+	ProviderOllama     Provider = "ollama"
+	ProviderAnthropic  Provider = "anthropic"
+	ProviderGroq       Provider = "groq"
+	ProviderOpenAI     Provider = "openai"
 	ProviderOpenRouter Provider = "openrouter"
 )
 
@@ -480,7 +480,6 @@ func groqStream(ctx context.Context, messages []Message, model string, temperatu
 	}
 	return openaiCompatStream(ctx, groqBase, key, "", messages, model, temperature, onToken)
 }
-
 
 // ── OpenAI ───────────────────────────────────────────────────────
 

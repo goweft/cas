@@ -12,11 +12,11 @@ type SessionRow struct {
 
 // MessageRow as returned from the store.
 type MessageRow struct {
-	ID          string
-	SessionID   string
-	Role        string
-	Text        string
-	Timestamp   time.Time
+	ID        string
+	SessionID string
+	Role      string
+	Text      string
+	Timestamp time.Time
 }
 
 // WorkspaceRow as returned from the store.
@@ -81,7 +81,6 @@ type Store interface {
 	GetVersion(workspaceID string, version int) (*HistoryRow, error)
 	Undo(workspaceID string) (*HistoryRow, error)
 	ApplyVersion(workspaceID string, version int) error
-
 
 	// Orchestration runs
 	SaveOrchestrationRun(run OrchestrationRunRow) error

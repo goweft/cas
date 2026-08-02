@@ -42,7 +42,7 @@ const (
 
 // MCPRequest is the input to MCPAgent.
 type MCPRequest struct {
-	Instruction string             // what the user asked
+	Instruction string                // what the user asked
 	Connection  *mcpclient.Connection // the bound MCP server
 	Autonomy    Autonomy
 	UserContext string

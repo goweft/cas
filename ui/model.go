@@ -3,9 +3,10 @@
 // Layout: split panel — chat (40%) left, tabbed workspace (60%) right.
 //
 // Focus states:
-//   FocusChat      — typing in chat input, navigating history
-//   FocusWorkspace — viewing workspace, switching tabs, entering edit mode
-//   FocusEdit      — inline editing via bubbles/textarea, Esc saves + exits
+//
+//	FocusChat      — typing in chat input, navigating history
+//	FocusWorkspace — viewing workspace, switching tabs, entering edit mode
+//	FocusEdit      — inline editing via bubbles/textarea, Esc saves + exits
 //
 // Streaming: buffered channel + recursive tea.Cmd (one event per tick).
 package ui
@@ -18,8 +19,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/goweft/cas/internal/intent"
 	"github.com/goweft/cas/internal/llm"
@@ -41,15 +42,15 @@ var (
 	styleWSPanel     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colWorkspace).Padding(0, 1)
 	styleEditPanel   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colEdit).Padding(0, 1)
 
-	styleTitle       = lipgloss.NewStyle().Foreground(colActive).Bold(true)
-	styleWSType      = lipgloss.NewStyle().Foreground(colWorkspace).Italic(true)
-	styleEditBadge   = lipgloss.NewStyle().Foreground(colEdit).Bold(true)
-	styleDim         = lipgloss.NewStyle().Foreground(colDim)
-	styleUser        = lipgloss.NewStyle().Foreground(lipgloss.Color("#79c0ff"))
-	styleShell       = lipgloss.NewStyle().Foreground(lipgloss.Color("#7ee787"))
-	styleInput       = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
-	styleStatus      = lipgloss.NewStyle().Foreground(colDim).Italic(true)
-	styleCode        = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
+	styleTitle     = lipgloss.NewStyle().Foreground(colActive).Bold(true)
+	styleWSType    = lipgloss.NewStyle().Foreground(colWorkspace).Italic(true)
+	styleEditBadge = lipgloss.NewStyle().Foreground(colEdit).Bold(true)
+	styleDim       = lipgloss.NewStyle().Foreground(colDim)
+	styleUser      = lipgloss.NewStyle().Foreground(lipgloss.Color("#79c0ff"))
+	styleShell     = lipgloss.NewStyle().Foreground(lipgloss.Color("#7ee787"))
+	styleInput     = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
+	styleStatus    = lipgloss.NewStyle().Foreground(colDim).Italic(true)
+	styleCode      = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
 
 	styleTabActive   = lipgloss.NewStyle().Foreground(colWorkspace).Bold(true).Padding(0, 1)
 	styleTabInactive = lipgloss.NewStyle().Foreground(colDim).Padding(0, 1)
@@ -64,7 +65,7 @@ type tabState struct {
 	wsType    string
 	content   string // current content (may differ from ws.Content while editing)
 	scroll    int
-	connected bool   // false for mcp/web workspaces restored without live session
+	connected bool // false for mcp/web workspaces restored without live session
 }
 
 func tabFromWorkspace(ws *workspace.Workspace) tabState {
@@ -74,12 +75,12 @@ func tabFromWorkspace(ws *workspace.Workspace) tabState {
 // ── Stream event ──────────────────────────────────────────────────
 
 type streamEvent struct {
-	Token   string
-	Resp    *shell.StreamResponse
-	Err     error
+	Token string
+	Resp  *shell.StreamResponse
+	Err   error
 	// Confirm fields — set when the executor needs user approval before acting.
-	ConfirmRequest string       // human-readable description of what will happen
-	ConfirmCh      chan<- bool  // send true to approve, false to skip
+	ConfirmRequest string      // human-readable description of what will happen
+	ConfirmCh      chan<- bool // send true to approve, false to skip
 }
 
 // ── Tea messages ──────────────────────────────────────────────────
@@ -109,10 +110,10 @@ type Model struct {
 	sessionID string
 
 	// Chat
-	messages   []shell.Message
+	messages    []shell.Message
 	input       string
-	inputCursor int    // rune offset of cursor in input
-	chatScroll int
+	inputCursor int // rune offset of cursor in input
+	chatScroll  int
 
 	// Workspace tabs
 	tabs      []tabState
@@ -123,10 +124,10 @@ type Model struct {
 	editDirty bool // content changed since last save
 
 	// Streaming
-	streaming     bool
-	streamIntent  string // "create_workspace" | "edit_workspace" | "chat" — set at submit
-	streamBuf string  // plain string — Builder must not be copied (Model is a value type)
-	streamCh  chan streamEvent
+	streaming    bool
+	streamIntent string // "create_workspace" | "edit_workspace" | "chat" — set at submit
+	streamBuf    string // plain string — Builder must not be copied (Model is a value type)
+	streamCh     chan streamEvent
 
 	// Layout
 	width  int
@@ -137,7 +138,7 @@ type Model struct {
 	status string
 
 	// Confirm-mode state (FocusConfirm)
-	confirmDescription string    // what action is pending
+	confirmDescription string      // what action is pending
 	confirmCh          chan<- bool // send true/false to unblock the executor
 }
 
@@ -147,9 +148,9 @@ func New(sh *shell.Shell, sessionID string, history []shell.Message, workspaces 
 		sh:        sh,
 		sessionID: sessionID,
 		messages:  history,
-		focus:  FocusChat,
-		width:  80,  // sensible default until WindowSizeMsg arrives
-		height: 24,
+		focus:     FocusChat,
+		width:     80, // sensible default until WindowSizeMsg arrives
+		height:    24,
 	}
 	for _, ws := range workspaces {
 		m.tabs = append(m.tabs, tabFromWorkspace(ws))
@@ -794,7 +795,7 @@ func (m Model) renderChat(w, h int) string {
 	sep := styleDim.Render(strings.Repeat("─", w-4))
 	var inputLine string
 	if m.streaming {
-		inputLine = styleInput.Render("> " + m.input) + styleDim.Render("…")
+		inputLine = styleInput.Render("> "+m.input) + styleDim.Render("…")
 	} else {
 		// Render cursor at correct position within the input
 		runes := []rune(m.input)
@@ -996,7 +997,6 @@ func (m Model) renderStatus() string {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
-
 
 // insertAt inserts s into input at the given rune position, returns new string and cursor.
 func insertAt(input string, cursor int, s string) (string, int) {

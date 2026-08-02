@@ -32,10 +32,10 @@ const (
 
 // Profile is the persisted behavioral learning state.
 type Profile struct {
-	DocTypes       map[string]int `json:"doc_types"`       // content-type nouns
-	WSTypes        map[string]int `json:"ws_types"`        // document/code/list counts
-	EditVerbs      map[string]int `json:"edit_verbs"`      // edit verb counts
-	Phrases        []string       `json:"phrases"`         // recent create-intent messages
+	DocTypes       map[string]int `json:"doc_types"`  // content-type nouns
+	WSTypes        map[string]int `json:"ws_types"`   // document/code/list counts
+	EditVerbs      map[string]int `json:"edit_verbs"` // edit verb counts
+	Phrases        []string       `json:"phrases"`    // recent create-intent messages
 	SessionCount   int            `json:"session_count"`
 	MessageCount   int            `json:"message_count"`
 	WorkspaceCount int            `json:"workspace_count"` // workspaces created

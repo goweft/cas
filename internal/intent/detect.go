@@ -20,14 +20,14 @@ import (
 type Kind string
 
 const (
-	KindCreate Kind = "create_workspace"
-	KindEdit   Kind = "edit_workspace"
-	KindClose  Kind = "close_workspace"
-	KindRun    Kind = "run_workspace"
-	KindChat   Kind = "chat"
-	KindPlugin  Kind = "plugin_command"
-	KindCombine Kind = "combine_workspaces"
-	KindIngest  Kind = "ingest_mcp"
+	KindCreate      Kind = "create_workspace"
+	KindEdit        Kind = "edit_workspace"
+	KindClose       Kind = "close_workspace"
+	KindRun         Kind = "run_workspace"
+	KindChat        Kind = "chat"
+	KindPlugin      Kind = "plugin_command"
+	KindCombine     Kind = "combine_workspaces"
+	KindIngest      Kind = "ingest_mcp"
 	KindBrowse      Kind = "browse_web"
 	KindOrchestrate Kind = "orchestrate"
 	KindReconnect   Kind = "reconnect"
@@ -124,16 +124,16 @@ func init() {
 	// Checked after close but before self-edit and edit patterns.
 	// Short, imperative phrases that mean "execute the active code".
 	runPatterns = []*regexp.Regexp{
-		ci(`(?i)^run\s*(it|this|that)?\.?$`),                                        // "run", "run it", "run this"
-		ci(`(?i)^execute\s*(it|this|that)?\.?$`),                                     // "execute", "execute it"
-		ci(`(?i)^run\s+(the\s+)?(script|code|program|file)\.?$`),                     // "run the script"
-		ci(`(?i)^execute\s+(the\s+)?(script|code|program|file)\.?$`),                 // "execute the code"
-		ci(`(?i)^test\s+(it|this|that)\.?$`),                                         // "test it", "test this"
-		ci(`(?i)^try\s+(it|this|that|running\s+it)\.?$`),                             // "try it", "try running it"
-		ci(`(?i)^go\s+run\.?$`),                                                      // "go run"
+		ci(`(?i)^run\s*(it|this|that)?\.?$`),                                          // "run", "run it", "run this"
+		ci(`(?i)^execute\s*(it|this|that)?\.?$`),                                      // "execute", "execute it"
+		ci(`(?i)^run\s+(the\s+)?(script|code|program|file)\.?$`),                      // "run the script"
+		ci(`(?i)^execute\s+(the\s+)?(script|code|program|file)\.?$`),                  // "execute the code"
+		ci(`(?i)^test\s+(it|this|that)\.?$`),                                          // "test it", "test this"
+		ci(`(?i)^try\s+(it|this|that|running\s+it)\.?$`),                              // "try it", "try running it"
+		ci(`(?i)^go\s+run\.?$`),                                                       // "go run"
 		ci(`(?i)^can\s+you\s+run\s+(it|this|that|the\s+(?:script|code|program))\.?$`), // "can you run it"
-		ci(`(?i)^please\s+run\s+(it|this|that)?\.?$`),                                // "please run it"
-		ci(`(?i)^run\s+and\s+show\s+(me\s+)?(the\s+)?output\.?$`),                   // "run and show me the output"
+		ci(`(?i)^please\s+run\s+(it|this|that)?\.?$`),                                 // "please run it"
+		ci(`(?i)^run\s+and\s+show\s+(me\s+)?(the\s+)?output\.?$`),                     // "run and show me the output"
 	}
 
 	// Combine/merge patterns — reference multiple workspaces

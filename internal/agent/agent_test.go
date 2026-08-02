@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/goweft/cas/internal/agent"
+	"github.com/goweft/cas/internal/llm"
 	mcpclient "github.com/goweft/cas/internal/mcp"
 	"github.com/goweft/cas/internal/webview"
-	"github.com/goweft/cas/internal/llm"
 )
 
 // ── GenerationAgent ───────────────────────────────────────────────

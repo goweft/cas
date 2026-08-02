@@ -151,7 +151,6 @@ func TestResolveAllEmpty(t *testing.T) {
 	}
 }
 
-
 // ── crossWorkspaceRefs ────────────────────────────────────────────
 
 func TestCrossWorkspaceRefsFindsReferenced(t *testing.T) {

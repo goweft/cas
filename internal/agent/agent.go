@@ -14,9 +14,10 @@
 // and needs no LLM call. It is covered by a contract at the shell boundary.
 //
 // Contract enforcement:
-//   Every agent checks preconditions before calling the LLM and postconditions
-//   after. Violations are returned as *contract.Violation and are always fatal
-//   to the operation — no retry, no fallback, no LLM-assisted recovery.
+//
+//	Every agent checks preconditions before calling the LLM and postconditions
+//	after. Violations are returned as *contract.Violation and are always fatal
+//	to the operation — no retry, no fallback, no LLM-assisted recovery.
 package agent
 
 import (

@@ -2,9 +2,9 @@ package shell_test
 
 import (
 	"context"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/goweft/cas/internal/intent"
@@ -231,7 +231,6 @@ func TestStreamMessageIntegration(t *testing.T) {
 	}
 }
 
-
 // ── Run workspace ─────────────────────────────────────────────────
 
 func TestRunNoActiveWorkspace(t *testing.T) {
@@ -366,7 +365,6 @@ func containsLower(s, sub string) bool {
 	return false
 }
 
-
 // ── Plugin commands ───────────────────────────────────────────────
 
 func TestPluginCommandExecutes(t *testing.T) {
@@ -448,7 +446,6 @@ cas.command("ping", "P", function() cas.reply("pong") end)
 	}
 }
 
-
 // ── Combine workspace ─────────────────────────────────────────────
 
 func TestCombineNeedsTwoWorkspaces(t *testing.T) {
@@ -477,6 +474,3 @@ func TestCombineNeedsTwoWorkspaces(t *testing.T) {
 		t.Errorf("expected 'at least 2' message with 1 workspace, got %q", resp.ChatReply)
 	}
 }
-
-
-

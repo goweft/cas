@@ -41,8 +41,8 @@ type WebRequest struct {
 // WebResult is the output from WebAgent.
 type WebResult struct {
 	Action      WebAction
-	Answer      string // populated for WebActionAnswer and WebActionExtract
-	NavigateURL string // populated for WebActionNavigate
+	Answer      string             // populated for WebActionAnswer and WebActionExtract
+	NavigateURL string             // populated for WebActionNavigate
 	NewPage     *webview.PageState // populated after navigation
 }
 

@@ -26,10 +26,10 @@ func newTestModel(t *testing.T) ui.Model {
 	return model.(ui.Model)
 }
 
-func key(k tea.KeyType) tea.KeyMsg         { return tea.KeyMsg{Type: k} }
-func rune_(r string) tea.KeyMsg            { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(r)} }
-func space() tea.KeyMsg                    { return tea.KeyMsg{Type: tea.KeySpace} }
-func backspace() tea.KeyMsg                { return tea.KeyMsg{Type: tea.KeyBackspace} }
+func key(k tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: k} }
+func rune_(r string) tea.KeyMsg    { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(r)} }
+func space() tea.KeyMsg            { return tea.KeyMsg{Type: tea.KeySpace} }
+func backspace() tea.KeyMsg        { return tea.KeyMsg{Type: tea.KeyBackspace} }
 
 // send applies a sequence of key messages to a model and returns the final model.
 func send(m ui.Model, keys ...tea.KeyMsg) ui.Model {
@@ -150,8 +150,8 @@ func TestHomeKey(t *testing.T) {
 func TestEndKey(t *testing.T) {
 	m := newTestModel(t)
 	m = typeString(m, "hello world")
-	m = send(m, key(tea.KeyHome))  // go to start
-	m = send(m, key(tea.KeyEnd))   // back to end
+	m = send(m, key(tea.KeyHome)) // go to start
+	m = send(m, key(tea.KeyEnd))  // back to end
 	if m.InputCursor() != 11 {
 		t.Errorf("expected cursor at 11 after End, got %d", m.InputCursor())
 	}
@@ -169,8 +169,8 @@ func TestCtrlA(t *testing.T) {
 func TestCtrlE(t *testing.T) {
 	m := newTestModel(t)
 	m = typeString(m, "hello")
-	m = send(m, key(tea.KeyCtrlA))  // go to start
-	m = send(m, key(tea.KeyCtrlE))  // back to end
+	m = send(m, key(tea.KeyCtrlA)) // go to start
+	m = send(m, key(tea.KeyCtrlE)) // back to end
 	if m.InputCursor() != 5 {
 		t.Errorf("expected cursor at 5 after Ctrl+E, got %d", m.InputCursor())
 	}

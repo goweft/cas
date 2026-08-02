@@ -98,7 +98,7 @@ func TestDetectChat(t *testing.T) {
 		"hello",
 		"how are you",
 		"what can you do",
-		"add me a coffee",         // "add" without edit-target noun → chat
+		"add me a coffee",           // "add" without edit-target noun → chat
 		"add it to my grocery list", // ambiguous but no workspace context
 	}
 	for _, msg := range cases {
@@ -139,7 +139,6 @@ func TestTitleHintAbsentForNonCreate(t *testing.T) {
 		}
 	}
 }
-
 
 // ── Run intent tests ──────────────────────────────────────────────
 
@@ -205,7 +204,6 @@ func TestRunBeforeSelfEdit(t *testing.T) {
 		t.Errorf("expected KindRun for 'run it', got %q", got.Kind)
 	}
 }
-
 
 // ── Combine intent tests ──────────────────────────────────────────
 
@@ -280,8 +278,8 @@ func TestIngestDetection(t *testing.T) {
 func TestIngestDoesNotMatchNormal(t *testing.T) {
 	cases := []string{
 		"write a document",
-		"ingest some data",         // no URL
-		"connect the dots",         // no URL
+		"ingest some data", // no URL
+		"connect the dots", // no URL
 		"add a section",
 	}
 	for _, msg := range cases {
@@ -324,10 +322,10 @@ func TestBrowseDetection(t *testing.T) {
 func TestBrowseDoesNotMatchNormal(t *testing.T) {
 	cases := []string{
 		"write a document",
-		"open a new file",     // no URL
-		"fetch some data",     // no URL
-		"read the report",     // no URL
-		"go to sleep",         // no URL
+		"open a new file", // no URL
+		"fetch some data", // no URL
+		"read the report", // no URL
+		"go to sleep",     // no URL
 	}
 	for _, msg := range cases {
 		t.Run(msg, func(t *testing.T) {
@@ -398,8 +396,8 @@ func TestReconnectDetection(t *testing.T) {
 
 func TestReconnectTitleHintExtraction(t *testing.T) {
 	cases := []struct {
-		message   string
-		wantHint  string
+		message  string
+		wantHint string
 	}{
 		{"reconnect to the linear workspace", "the linear workspace"},
 		{"reconnect linear", "linear"},
@@ -417,7 +415,7 @@ func TestReconnectTitleHintExtraction(t *testing.T) {
 
 func TestReconnectDoesNotMatchNormal(t *testing.T) {
 	cases := []string{
-		"connect to a server",     // no URL but not reconnect
+		"connect to a server", // no URL but not reconnect
 		"write a document",
 		"edit the notes",
 	}
