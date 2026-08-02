@@ -294,7 +294,7 @@ func (s *SQLiteStore) CloseWorkspace(id string, closedAt time.Time) error {
 
 func (s *SQLiteStore) LoadWorkspaces() ([]WorkspaceRow, error) {
 	rows, err := s.db.Query(
-		`SELECT id, session_id, type, title, content, created_at, closed_at FROM workspaces ORDER BY created_at`,
+		`SELECT id, session_id, type, title, content, created_at, closed_at FROM workspaces ORDER BY created_at, rowid`,
 	)
 	if err != nil {
 		return nil, err
