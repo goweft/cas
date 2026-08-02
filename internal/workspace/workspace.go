@@ -22,6 +22,11 @@ type Workspace struct {
 	// Connected is false for mcp/web workspaces restored without a live session.
 	// Always true for document/code/list types.
 	Connected bool
+
+	// seq is the manager-local creation sequence. It, not CreatedAt, defines
+	// ordering: wall clocks are too coarse on some platforms (Windows) to
+	// separate back-to-back creates, and map iteration order is random.
+	seq int64
 }
 
 func (w *Workspace) IsActive() bool { return w.ClosedAt == nil }
@@ -39,12 +44,15 @@ func (e *ErrClosed) Error() string { return fmt.Sprintf("workspace %q is closed"
 // ErrNoHistory is returned when there is no history to undo.
 type ErrNoHistory struct{ ID string }
 
-func (e *ErrNoHistory) Error() string { return fmt.Sprintf("no history to undo for workspace %q", e.ID) }
+func (e *ErrNoHistory) Error() string {
+	return fmt.Sprintf("no history to undo for workspace %q", e.ID)
+}
 
 // Manager holds all live workspace state and mediates store access.
 type Manager struct {
 	store      store.Store
 	workspaces map[string]*Workspace
+	nextSeq    int64
 }
 
 // NewManager returns a Manager backed by the given store.
@@ -73,6 +81,8 @@ func (m *Manager) Restore() error {
 			// mcp and web workspaces restored from disk have no live session.
 			Connected: row.Type != "mcp" && row.Type != "web",
 		}
+		ws.seq = m.nextSeq
+		m.nextSeq++
 		m.workspaces[ws.ID] = ws
 	}
 	return nil
@@ -111,6 +121,8 @@ func (m *Manager) Create(id, wsType, title, content, sessionID string) (*Workspa
 		return nil, err
 	}
 
+	ws.seq = m.nextSeq
+	m.nextSeq++
 	m.workspaces[ws.ID] = ws
 	return ws, nil
 }
@@ -203,7 +215,7 @@ func (m *Manager) Active() []*Workspace {
 		}
 	}
 	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].CreatedAt.Before(out[j-1].CreatedAt); j-- {
+		for j := i; j > 0 && out[j].seq < out[j-1].seq; j-- {
 			out[j], out[j-1] = out[j-1], out[j]
 		}
 	}

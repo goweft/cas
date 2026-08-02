@@ -10,13 +10,14 @@ import (
 )
 
 type MemoryStore struct {
-	mu              sync.Mutex
-	sessions        []SessionRow
-	messages        []MessageRow
-	workspaces      map[string]*WorkspaceRow
-	history         map[string][]HistoryRow         // workspaceID → versions
-	orchRuns        []OrchestrationRunRow
-	orchSteps       map[string][]OrchestrationStepRow // runID → steps
+	mu         sync.Mutex
+	sessions   []SessionRow
+	messages   []MessageRow
+	workspaces map[string]*WorkspaceRow
+	wsOrder    []string                // workspace IDs in first-insert order
+	history    map[string][]HistoryRow // workspaceID → versions
+	orchRuns   []OrchestrationRunRow
+	orchSteps  map[string][]OrchestrationStepRow // runID → steps
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -65,6 +66,9 @@ func (m *MemoryStore) SaveWorkspace(ws WorkspaceRow) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := ws
+	if _, exists := m.workspaces[ws.ID]; !exists {
+		m.wsOrder = append(m.wsOrder, ws.ID)
+	}
 	m.workspaces[ws.ID] = &cp
 	return nil
 }
@@ -106,8 +110,10 @@ func (m *MemoryStore) LoadWorkspaces() ([]WorkspaceRow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]WorkspaceRow, 0, len(m.workspaces))
-	for _, ws := range m.workspaces {
-		out = append(out, *ws)
+	for _, id := range m.wsOrder {
+		if ws, ok := m.workspaces[id]; ok {
+			out = append(out, *ws)
+		}
 	}
 	return out, nil
 }
