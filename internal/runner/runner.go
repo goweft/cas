@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -115,13 +114,10 @@ func Run(ctx context.Context, content string, timeout time.Duration) (*Result, e
 	cmd.Stderr = &stderr
 	cmd.Dir = tmpDir
 
-	// Create a new process group so we can kill the entire tree on timeout.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	// Cancel kills the process group, not just the leader.
-	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}
+	// Platform-specific: process-group semantics differ (see proc_unix.go /
+	// proc_windows.go). Ensures a timeout kills the child — and, on Unix,
+	// its whole process tree.
+	configureProcess(cmd)
 
 	// Restrict environment — inherit PATH but not secrets
 	cmd.Env = []string{
