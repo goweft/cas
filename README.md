@@ -271,6 +271,9 @@ ollama pull qwen2.5-coder:7b
 ./cas
 ```
 
+Ollama doesn't have to be local: set `OLLAMA_BASE_URL` to point CAS at a
+GPU box over Tailscale — see [`docs/deployment.md`](docs/deployment.md).
+
 ### Cloud — Anthropic API (no GPU required)
 
 ```bash
