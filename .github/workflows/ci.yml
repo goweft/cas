@@ -8,8 +8,12 @@ on:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +26,7 @@ jobs:
         run: go build -o cas ./cmd/cas
 
       - name: Test
-        run: go test ./... -count=1 -timeout 60s
+        run: go test ./... -count=1 -timeout 120s
 
       - name: Vet
         run: go vet ./...
