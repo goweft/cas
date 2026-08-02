@@ -1,7 +1,7 @@
 # CAS Development Schedule
 
-**Status:** Draft. Subject to revision.
-**Date:** 2026-04-26
+**Status:** Living document — revised as blocks resolve.
+**Date:** 2026-04-26 (last revised 2026-08-02)
 
 ---
 
@@ -38,6 +38,9 @@ Each track ships something independently. If one stalls, the others continue.
 
 Reconcile doc claims with reality. Cut a clean baseline.
 
+**Shipped.** ARCHITECTURE.md, README pass, posts live on dev.to, releases
+tagged.
+
 - Top-level `ARCHITECTURE.md` describing actual layout
 - README pass: verify test count claims, feature list, install instructions
 - Publish one of the existing blog drafts (post 01, 02, or 04 in
@@ -45,6 +48,9 @@ Reconcile doc claims with reality. Cut a clean baseline.
 - Tag a release of current state
 
 ### Block 2 — Multi-backend (1–2 weeks, Track 2)
+
+**Shipped, beyond plan.** Groq plus OpenAI and OpenRouter, with provider
+validation, `--providers`, and active-provider display in the status bar.
 
 Add a third LLM provider. Groq is a reasonable target — fast, free tier,
 distinctive from Anthropic and Ollama. This is the realistic gate before
@@ -67,6 +73,15 @@ After Blocks 1 and 2 ship, the choice is:
 
 Don't commit to Track 3 in advance — the right move depends on what Blocks 1
 and 2 reveal about both adoption signal and personal appetite.
+
+**Decided 2026-08-01: continue Track 2.** Adoption at decision time was
+flat (1 star, 0 forks, single-digit traffic), post 07 unpublished. The
+listed Track 2 items are now executed: release automation with
+cross-platform binaries (v0.3.1, v0.3.2), example plugins verified by CI,
+the deployment doc, and cross-OS test execution — which surfaced and
+fixed a real workspace-ordering bug. The decision point re-opens on the
+same three options once post 07 publishes and adoption has had a chance
+to respond.
 
 ### Block 4 — If Track 3 begins (3–6 weeks)
 
@@ -114,3 +129,7 @@ dial, scoped memory.
 
 - **2026-04-26.** Initial draft. Anchored to current state after audit
   on the same date.
+- **2026-08-02.** Blocks 1–2 marked shipped. Block 3 decided: continue
+  Track 2. Track 2 list executed (v0.3.1/v0.3.2 releases, example
+  plugins, deployment doc, cross-OS CI plus the ordering fix it caught).
+  Next decision gated on post-07 adoption signal.
