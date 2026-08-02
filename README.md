@@ -132,6 +132,8 @@ Type `standup` in the chat and the plugin runs — no LLM call, sub-millisecond.
 
 The Lua VM is sandboxed: no file I/O, no `os.execute`, no network. Plugins interact with CAS through a controlled API: `cas.command()`, `cas.reply()`, `cas.workspaces()`, `cas.active()`.
 
+Ready-to-use plugins live in [`examples/plugins/`](examples/plugins/) — `standup`, `wordcount`/`wc`, `toc`, and `todos`. Copy them into `~/.cas/plugins/` to try them. They're loaded and executed by the test suite on every push, so the examples can't drift from the API.
+
 ### Cross-workspace operations
 
 With multiple workspaces open, CAS resolves which one you're addressing by fuzzy-matching title fragments:
