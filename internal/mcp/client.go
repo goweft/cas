@@ -39,7 +39,7 @@ type Connection struct {
 
 // Connect opens a connection to an MCP server at the given URL,
 // performs the initialization handshake, and returns the discovered tools.
-// Supports SSE (http/https) and stdio (file://) transports.
+// SSE transport only (http/https); stdio is not implemented.
 func Connect(ctx context.Context, serverURL string) (*Connection, error) {
 	client, err := mcpgo.NewSSEMCPClient(serverURL)
 	if err != nil {
