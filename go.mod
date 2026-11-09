@@ -10,7 +10,7 @@ require (
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/net v0.62.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
